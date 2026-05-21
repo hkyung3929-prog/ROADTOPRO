@@ -237,6 +237,59 @@ select.inp{cursor:pointer;}
 
 @media(max-width:900px){.prog-layout{grid-template-columns:1fr;}.day-grid{grid-template-columns:repeat(4,1fr);}.stats-strip{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:540px){.day-grid{grid-template-columns:repeat(3,1fr);}}
+
+/* ── COVER CHOICE ── */
+#cover-phase2 { animation: fadeUp .35s ease both; display:flex; flex-direction:column; align-items:center; gap:20px; }
+.cover-choice-label {
+  font-family: var(--fm); font-size: 11px; letter-spacing: .28em;
+  text-transform: uppercase; color: var(--t3);
+  animation: fadeUp .3s .05s ease both;
+}
+.cover-choice-row {
+  display: flex; align-items: center; gap: 24px;
+  animation: fadeUp .35s .1s ease both;
+}
+.cover-choice-vs {
+  font-family: var(--fh); font-size: 20px; font-weight: 900;
+  font-style: italic; color: var(--t3); letter-spacing: .1em;
+}
+.btn-choice {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--b2);
+  border-radius: 14px;
+  padding: 22px 32px;
+  cursor: pointer;
+  transition: all .22s;
+  position: relative; overflow: hidden;
+}
+.btn-choice::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,106,0,.08), transparent);
+  opacity: 0; transition: opacity .22s;
+}
+.btn-choice:hover { border-color: var(--ac); transform: translateY(-4px); box-shadow: 0 12px 36px rgba(255,106,0,.2); }
+.btn-choice:hover::before { opacity: 1; }
+.btn-choice-pig::before { background: linear-gradient(135deg, rgba(255,105,180,.1), transparent); }
+.btn-choice-pig:hover { border-color: #ff69b4; box-shadow: 0 12px 36px rgba(255,105,180,.2); }
+.btn-choice-icon { font-size: 52px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+.btn-choice-name {
+  font-family: var(--fh); font-size: 20px; font-weight: 900;
+  font-style: italic; letter-spacing: .12em;
+  color: var(--t1);
+}
+.btn-choice:hover .btn-choice-name { color: var(--ac); }
+.btn-choice-pig:hover .btn-choice-name { color: #ff69b4; }
+
+/* ── USER BADGE in header ── */
+.user-badge {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--fh); font-size: 16px; font-weight: 700;
+  font-style: italic; letter-spacing: .08em;
+  color: var(--t2);
+}
+.user-badge-icon { font-size: 20px; }
 </style>
 
 <script type="module">
@@ -306,12 +359,31 @@ document.dispatchEvent(new Event('firebase-ready'));
         <polyline class="hb-line" points="0,24 60,24 72,24 78,18 84,30 88,4 92,44 96,20 102,24 114,24 174,24 186,24 192,18 198,30 202,4 206,44 210,20 216,24 228,24 288,24 300,24 306,18 312,30 316,4 320,44 324,20 330,24 342,24 402,24 414,24 420,18 426,30 430,4 434,44 438,20 444,24 520,24"/>
       </svg>
     </div>
-    <button class="btn-enter" onclick="enterApp()">
-      <div class="btn-enter-inner">
-        <span class="btn-enter-label">시작하기</span>
-        <span class="btn-enter-arrow">→</span>
+    <!-- Phase 1: ENTER -->
+    <div id="cover-phase1">
+      <button class="btn-enter" onclick="showChoice()">
+        <div class="btn-enter-inner">
+          <span class="btn-enter-label">ENTER</span>
+          <span class="btn-enter-arrow">→</span>
+        </div>
+      </button>
+    </div>
+
+    <!-- Phase 2: 두 캐릭터 선택 -->
+    <div id="cover-phase2" style="display:none;">
+      <div class="cover-choice-label">누구로 입장할까요?</div>
+      <div class="cover-choice-row">
+        <button class="btn-choice" onclick="enterAs('tiger')">
+          <div class="btn-choice-icon">🐯</div>
+          <div class="btn-choice-name">TIGER</div>
+        </button>
+        <div class="cover-choice-vs">VS</div>
+        <button class="btn-choice btn-choice-pig" onclick="enterAs('pig')">
+          <div class="btn-choice-icon">🐷</div>
+          <div class="btn-choice-name">PIG</div>
+        </button>
       </div>
-    </button>
+    </div>
   </div>
   <div class="cover-bottom-line"></div>
 </div>
@@ -325,6 +397,7 @@ document.dispatchEvent(new Event('firebase-ready'));
       <span class="header-sep">/</span>
       <span class="header-sub">Road to Pro</span>
     </div>
+    <div class="user-badge" id="user-badge"></div>
     <button class="btn-home" onclick="goHome()" title="홈으로">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="2" y="10" width="4" height="4" rx="1"/>
@@ -530,22 +603,45 @@ async function loadAllData(){
 }
 
 /* COVER */
-window.enterApp=function(){
-  const c=document.getElementById('cover');
+let currentUser = 'tiger'; // 'tiger' | 'pig'
+
+window.showChoice = function(){
+  document.getElementById('cover-phase1').style.display = 'none';
+  document.getElementById('cover-phase2').style.display = 'flex';
+};
+
+window.enterAs = function(user){
+  currentUser = user;
+  window._userId = user; // Firestore path key
+  const badge = document.getElementById('user-badge');
+  if(badge){
+    badge.innerHTML = user === 'tiger'
+      ? '<span class="user-badge-icon">🐯</span> TIGER'
+      : '<span class="user-badge-icon">🐷</span> PIG';
+    badge.style.color = user === 'tiger' ? 'var(--ac)' : '#ff69b4';
+  }
+  const c = document.getElementById('cover');
   c.classList.add('exit');
   setTimeout(async ()=>{
-    c.style.display='none';
-    document.getElementById('app').style.display='block';
+    c.style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    // reset data for this user
+    programs = [];
+    logs = {};
     await loadAllData();
     renderProgList();
     renderToday();
-  },440);
+  }, 440);
 };
-window.goHome=function(){
-  document.getElementById('app').style.display='none';
-  const cover=document.getElementById('cover');
+
+window.goHome = function(){
+  document.getElementById('app').style.display = 'none';
+  const cover = document.getElementById('cover');
   cover.classList.remove('exit');
-  cover.style.display='flex';
+  cover.style.display = 'flex';
+  // reset to phase 1
+  document.getElementById('cover-phase1').style.display = 'block';
+  document.getElementById('cover-phase2').style.display = 'none';
 };
 
 /* TABS */
