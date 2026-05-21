@@ -217,6 +217,10 @@ select.inp{cursor:pointer;}
 .twday.is-today .twday-date{color:var(--ac);}
 .twday.is-done{border-color:rgba(34,209,122,.3);}
 .twday.is-done .twday-date{color:var(--green);}
+.twday.is-selected{border-color:var(--ac2);background:rgba(255,179,71,.08);}
+.twday.is-selected .twday-date{color:var(--ac2);}
+.twday.is-selected.is-today{border-color:var(--ac);background:rgba(255,106,0,.07);}
+.twday.is-selected.is-today .twday-date{color:var(--ac);}
 .today-hero{background:var(--s2);border:1px solid var(--b1);border-top:3px solid var(--ac);border-radius:var(--r);padding:24px 28px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:20px;}
 .today-date-label{font-family:var(--fm);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--t2);margin-bottom:6px;}
 .today-day-title{font-family:var(--fh);font-size:42px;font-weight:900;font-style:italic;color:var(--t1);line-height:1;}
@@ -479,6 +483,15 @@ document.dispatchEvent(new Event('firebase-ready'));
   <!-- TODAY -->
   <div class="view on" id="view-today">
   <div class="today-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;">
+      <div style="font-family:var(--fh);font-size:20px;font-weight:900;font-style:italic;letter-spacing:.06em;color:var(--t1);">⚡ 오늘의 기록</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;">날짜 선택</span>
+        <input type="date" id="today-date-selector" class="inp inp-sm inp-mono" style="width:138px;"
+          onchange="onTodayDateChange(this.value)">
+        <button class="btn btn-sm btn-ghost" onclick="todaySelectedDate=null;renderToday();" style="font-size:11px;">오늘</button>
+      </div>
+    </div>
     <div class="today-week-strip" id="today-week-strip"></div>
     <div id="today-hero-wrap"></div>
     <div id="today-log-wrap"></div>
@@ -493,6 +506,7 @@ document.dispatchEvent(new Event('firebase-ready'));
 const DAYS_KO=['월','화','수','목','금','토','일'];
 let programs=[], logs={};
 let editingProgId=null, editingDayIdx=0, weekOffset=0, logOpenDay=null, weekProgId=null;
+let todaySelectedDate=null;
 let currentUser='tiger';
 
 /* ── 유틸 ── */
@@ -616,7 +630,7 @@ window.switchTab=function(name,el){
   el.classList.add('on');
   document.getElementById('view-'+name).classList.add('on');
   if(name==='log')renderLog();
-  if(name==='today')renderToday();
+  if(name==='today'){if(!todaySelectedDate)todaySelectedDate=toISO(new Date());renderToday();}
   if(name==='program')renderProgList();
 };
 
@@ -648,7 +662,7 @@ function renderProgList(){
     }
     div.innerHTML=dateHtml
       +'<div class="prog-item-name">'+p.name+'</div>'
-      +'<div class="prog-item-meta">'+p.days.filter(function(d){return d.exercises.length;}).length+'/5일 구성</div>';
+      +'<div class="prog-item-meta">'+p.days.filter(function(d){return d.exercises.length;}).length+'/'+p.days.length+'일 구성</div>';
     const delBtn=document.createElement('button');
     delBtn.className='btn btn-sm btn-danger';delBtn.innerHTML='✕';
     delBtn.addEventListener('click',function(e){e.stopPropagation();deleteProgram(p.id);});
@@ -665,7 +679,6 @@ window.newProgram=function(){
       return {
         label:'Day '+(i+1),
         exercises:[]
-        // 필드 없음 — 프로그램 설계는 운동명+세트+휴식시간 고정
       };
     })
   };
@@ -712,6 +725,16 @@ function renderEditor(){
     }).join('')
     :'<div style="padding:16px 12px;color:var(--t2);font-size:12px;font-family:var(--fm);">운동을 추가하세요</div>';
 
+  // DAY 탭 하단에 추가/삭제 버튼 표시
+  const canAddDay=(p.days.length<7);
+  const canRemoveDay=(p.days.length>1);
+  const dayMgmtHtml='<div style="display:flex;gap:6px;margin-bottom:18px;align-items:center;">'
+    +'<span class="sec-label" style="margin-bottom:0;flex-shrink:0;">운동일</span>'
+    +'<div class="day-tabs" style="margin-bottom:0;flex:1;">'+dayTabs+'</div>'
+    +(canAddDay?'<button class="btn btn-sm btn-ghost" onclick="addDay()" style="flex-shrink:0;white-space:nowrap;">+ DAY 추가</button>':'')
+    +(canRemoveDay?'<button class="btn btn-sm btn-danger" onclick="removeDay()" style="flex-shrink:0;white-space:nowrap;">DAY 삭제</button>':'')
+    +'</div>';
+
   document.getElementById('prog-editor').innerHTML=
     '<div class="card hot-card"><div class="card-head" style="flex-wrap:wrap;gap:10px;">'
     +'<div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">'
@@ -727,7 +750,7 @@ function renderEditor(){
     +'</div></div>'
     +'<button class="btn btn-primary btn-sm" onclick="saveProgram()">💾 저장</button>'
     +'</div><div class="card-body">'
-    +'<span class="sec-label">운동일</span><div class="day-tabs">'+dayTabs+'</div>'
+    +dayMgmtHtml
     +'<div style="margin-bottom:16px;"><span class="sec-label">Day '+(editingDayIdx+1)+' 이름</span>'
     +'<input class="inp inp-sm" value="'+day.label+'" placeholder="예: 가슴&삼두, 하체…" oninput="updateDayLabel(this.value)"></div>'
     +'<span class="sec-label">운동 목록</span>'
@@ -741,6 +764,22 @@ function renderEditor(){
 }
 
 window.switchDay=function(i){editingDayIdx=i;renderEditor();};
+window.addDay=function(){
+  const p=getProg();if(!p)return;
+  if(p.days.length>=7){toast('최대 7일까지 추가할 수 있습니다');return;}
+  const newIdx=p.days.length;
+  p.days.push({label:'Day '+(newIdx+1),exercises:[]});
+  editingDayIdx=newIdx;
+  renderEditor();
+};
+window.removeDay=function(){
+  const p=getProg();if(!p)return;
+  if(p.days.length<=1){toast('최소 1일은 있어야 합니다');return;}
+  if(!confirm('DAY '+(editingDayIdx+1)+'을(를) 삭제할까요? 운동 목록도 모두 삭제됩니다.'))return;
+  p.days.splice(editingDayIdx,1);
+  if(editingDayIdx>=p.days.length)editingDayIdx=p.days.length-1;
+  renderEditor();
+};
 window.updateProgName=function(v){const p=getProg();if(p)p.name=v;};
 window.updateProgDate=function(f,v){const p=getProg();if(p)p[f]=v;};
 window.updateDayLabel=function(v){const p=getProg();if(p)p.days[editingDayIdx].label=v;};
@@ -803,8 +842,9 @@ function renderDayGrid(){
     const dl=wl.days[i]||{};
     const isWeekend=(i===5||i===6);
     const isToday=toISO(dates[i])===todayStr;
-    const pd=(!isWeekend&&workoutIdx<5&&prog)?prog.days[workoutIdx]:null;
-    if(!isWeekend&&workoutIdx<5)workoutIdx++;
+    const numDays=prog?prog.days.length:5;
+    const pd=(!isWeekend&&workoutIdx<numDays&&prog)?prog.days[workoutIdx]:null;
+    if(!isWeekend&&workoutIdx<numDays)workoutIdx++;
     const isDone=!!dl.done;
     const hasLog=dl.log&&dl.log.some(function(r){
       return r.sets&&r.sets.some&&r.sets.some(function(s){return s.weight||s.reps;});
@@ -831,6 +871,8 @@ function renderDayGrid(){
 
 function renderStats(){
   const wl=getWeekLog();let done=0,sets=0,vol=0;
+  const prog=weekProgId?programs.find(function(p){return p.id===weekProgId;}):null;
+  const numDays=prog?prog.days.length:5;
   for(let i=0;i<7;i++){
     const dl=wl.days[i]||{};if(dl.done)done++;
     (dl.log||[]).forEach(function(ex){
@@ -840,12 +882,12 @@ function renderStats(){
       });
     });
   }
-  const pct=Math.round(done/5*100);
+  const pct=Math.round(done/numDays*100);
   document.getElementById('st0').querySelector('.stat-val').innerHTML='<em>'+done+'</em><span class="stat-unit">일</span>';
   document.getElementById('st1').querySelector('.stat-val').innerHTML='<em>'+sets+'</em><span class="stat-unit">세트</span>';
   document.getElementById('st2').querySelector('.stat-val').innerHTML='<em>'+Math.round(vol).toLocaleString()+'</em><span class="stat-unit">kg</span>';
   document.getElementById('st3').querySelector('.stat-val').innerHTML='<em>'+pct+'</em><span class="stat-unit">%</span>';
-  document.getElementById('prog-bar-pct').textContent=done+' / 5일';
+  document.getElementById('prog-bar-pct').textContent=done+' / '+numDays+'일';
   document.getElementById('prog-bar-fill').style.width=Math.min(pct,100)+'%';
   setTimeout(function(){document.querySelectorAll('.stat').forEach(function(s){s.classList.add('loaded');});},80);
 }
@@ -854,7 +896,8 @@ function openLogPanel(i){
   if(logOpenDay===i){closeLogPanel();return;}
   logOpenDay=i;renderDayGrid();
   const prog=weekProgId?programs.find(function(p){return p.id===weekProgId;}):null;
-  const pd=prog?prog.days[Math.min(i,4)]:null;
+  const numDays=prog?prog.days.length:5;
+  const pd=prog?prog.days[Math.min(i,numDays-1)]:null;
   const wl=getWeekLog();const dl=wl.days[i]||{};
   document.getElementById('lp-title-day').textContent='DAY 0'+(i+1)+' ';
   document.getElementById('lp-title-name').textContent=pd?pd.label:'';
@@ -984,30 +1027,57 @@ window.changeWeek=function(dir){weekOffset+=dir;renderLog();};
 /* ══════════════════════════════════
    오늘의 기록 탭
 ══════════════════════════════════ */
+
 function renderToday(){
-  const todayDate=new Date();
-  const todayStr=toISO(todayDate);
-  const dow=todayDate.getDay();
-  const weekDow=(dow+6)%7;
-  const wkDates=getWeekDates(0);
-  const wl=getWeekLog(0);
-  const prog=getActiveProg(0);
-  if(!wl.progId&&prog){wl.progId=prog.id;setWeekLogLocal(wl,0);}
+  const realToday=new Date();
+  const todayStr=toISO(realToday);
+
+  // 선택된 날짜 (없으면 오늘)
+  if(!todaySelectedDate)todaySelectedDate=todayStr;
+
+  // 선택 날짜 기준 주간 정보
+  const selDate=new Date(todaySelectedDate+'T00:00:00');
+  const selDow=selDate.getDay();
+  const selWeekDow=(selDow+6)%7; // 월=0 ... 일=6
+
+  // 선택 날짜가 속한 주의 weekOffset 계산
+  const todayMon=new Date(realToday);
+  todayMon.setDate(realToday.getDate()-((realToday.getDay()+6)%7));
+  const selMon=new Date(selDate);
+  selMon.setDate(selDate.getDate()-selWeekDow);
+  const diffMs=selMon-todayMon;
+  const selWeekOff=Math.round(diffMs/(7*24*3600*1000));
+
+  const wkDates=getWeekDates(selWeekOff);
+  const wl=getWeekLog(selWeekOff);
+  const prog=getActiveProg(selWeekOff);
+  if(!wl.progId&&prog){wl.progId=prog.id;setWeekLogLocal(wl,selWeekOff);}
   const activeProg=wl.progId?programs.find(function(p){return p.id===wl.progId;}):null;
+
+  // 날짜 선택 헤더
+  const dateHeader=document.getElementById('today-date-selector');
+  if(dateHeader){
+    dateHeader.value=todaySelectedDate;
+  }
 
   const strip=document.getElementById('today-week-strip');
   strip.innerHTML='';
   wkDates.forEach(function(d,i){
-    const isToday=toISO(d)===todayStr;const dl=wl.days[i]||{};
+    const dStr=toISO(d);
+    const isToday=dStr===todayStr;
+    const isSel=dStr===todaySelectedDate;
+    const dl=wl.days[i]||{};
     const div=document.createElement('div');
-    div.className='twday'+(isToday?' is-today':'')+(dl.done?' is-done':'');
+    div.className='twday'+(isToday?' is-today':'')+(isSel?' is-selected':'')+(dl.done?' is-done':'');
     div.innerHTML='<div class="twday-name">'+DAYS_KO[i]+'</div><div class="twday-date">'+fmt(d)+'</div>';
+    div.style.cursor='pointer';
+    (function(dateStr){div.addEventListener('click',function(){todaySelectedDate=dateStr;renderToday();});})(dStr);
     strip.appendChild(div);
   });
 
   const heroWrap=document.getElementById('today-hero-wrap');
   const logWrap=document.getElementById('today-log-wrap');
-  const isWeekend=(weekDow===5||weekDow===6);
+  const isWeekend=(selWeekDow===5||selWeekDow===6);
 
   if(!activeProg){
     heroWrap.innerHTML='<div class="today-no-prog"><span class="big">📋 프로그램 없음</span>프로그램 설계 탭에서 프로그램을 만들고<br>날짜를 설정해주세요.</div>';
@@ -1015,20 +1085,24 @@ function renderToday(){
   }
   if(isWeekend){
     heroWrap.innerHTML='<div class="today-hero"><div class="today-hero-left">'
-      +'<div class="today-date-label">'+fmtDate(todayStr)+'</div>'
+      +'<div class="today-date-label">'+fmtDate(todaySelectedDate)+'</div>'
       +'<div class="today-day-title">🌿 REST</div>'
       +'<div class="today-day-sub">주말 — 충분한 휴식을 취하세요</div></div>'
       +'<div class="today-badge rest">휴식일</div></div>';
     logWrap.innerHTML='';return;
   }
 
-  const pd=activeProg.days[Math.min(weekDow,4)];
-  const dl=wl.days[weekDow]||{};
+  // 프로그램 day 수에 맞게 인덱스 처리
+  const numProgDays=activeProg.days.length;
+  const progDayIdx=Math.min(selWeekDow,numProgDays-1);
+  const pd=activeProg.days[progDayIdx];
+  const dl=wl.days[selWeekDow]||{};
   const isDone=!!dl.done;
+  const isPast=todaySelectedDate<todayStr;
 
   heroWrap.innerHTML='<div class="today-hero"><div class="today-hero-left">'
-    +'<div class="today-date-label">'+fmtDate(todayStr)+'</div>'
-    +'<div class="today-day-title"><em>DAY 0'+(weekDow+1)+'</em></div>'
+    +'<div class="today-date-label">'+fmtDate(todaySelectedDate)+(isPast?' · <span style="color:var(--gold);font-size:10px;">과거 기록</span>':'')+'</div>'
+    +'<div class="today-day-title"><em>DAY 0'+(selWeekDow+1)+'</em></div>'
     +'<div class="today-day-sub">'+pd.label+'</div>'
     +'<div class="today-prog-name">'+activeProg.name+'</div></div>'
     +(isDone?'<div class="today-badge done">✓ 완료</div>':'<div class="today-badge todo">기록하기</div>')
@@ -1036,34 +1110,103 @@ function renderToday(){
 
   logWrap.innerHTML='<div class="today-panel">'
     +'<div class="today-panel-head">'
-    +'<div class="today-panel-title"><em>DAY 0'+(weekDow+1)+'</em>'+pd.label+'</div>'
-    +'<button class="btn btn-sm btn-gold'+(isDone?' filled':'')+'" id="btn-today-done" onclick="toggleTodayDone('+weekDow+')">'+(isDone?'✓ 완료됨':'완료 체크')+'</button>'
+    +'<div class="today-panel-title"><em>DAY 0'+(selWeekDow+1)+'</em>'+pd.label+'</div>'
+    +'<button class="btn btn-sm btn-gold'+(isDone?' filled':'')+'" id="btn-today-done" onclick="toggleTodayDone('+selWeekDow+','+selWeekOff+')">'+(isDone?'✓ 완료됨':'완료 체크')+'</button>'
     +'</div>'
     +'<div class="today-panel-body" id="today-log-body"></div>'
     +'</div>';
 
-  renderLogBody(document.getElementById('today-log-body'),dl,pd,wl,weekDow,true);
+  renderLogBodyToday(document.getElementById('today-log-body'),dl,pd,wl,selWeekDow,selWeekOff);
 }
 
-window.toggleTodayDone=async function(di){
-  const wl=getWeekLog(0);const dl=wl.days[di]||{};
-  dl.done=!dl.done;wl.days[di]=dl;setWeekLogLocal(wl,0);
-  await saveWeekLog(0);renderToday();toast(dl.done?'✓ 오늘 운동 완료!':'완료 취소',dl.done?'var(--green)':'var(--ac)');
+function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
+  if(!dl.log||dl.log.length!==pd.exercises.length){
+    dl.log=makeEmptyLog(pd);
+    wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);
+  }
+  const saveF='saveTodayLogWeek('+dayIdx+','+weekOff+')';
+  const chkF='toggleExDoneTodayWeek';
+
+  let html='';
+  dl.log.forEach(function(ex,ei){
+    const sets=parseInt(pd.exercises[ei]&&pd.exercises[ei].sets)||ex.sets.length||3;
+    const rest=pd.exercises[ei]&&pd.exercises[ei].rest?pd.exercises[ei].rest+'초':'—';
+    html+='<div class="log-ex-block">'
+      +'<div class="log-ex-header">'
+      +'<div class="log-ex-header-left">'
+      +'<div class="log-ex-title">'+(ex.name||'운동')+'</div>'
+      +'<div class="log-ex-meta">'+sets+'세트 · 휴식 '+rest+'</div>'
+      +'</div>'
+      +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+','+weekOff+')">'+(ex.done?'✓':'')+'</button>'
+      +'</div>'
+      +'<div class="log-sets-table">'
+      +'<div class="log-sets-head"><span>SET</span><span>중량(kg)</span><span>횟수</span></div>';
+    ex.sets.forEach(function(set,si){
+      html+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
+        +'<div class="log-set-num">'+(si+1)+'</div>'
+        +'<input class="log-field-input" type="number" min="0" step="0.5"'
+        +' value="'+(set.weight||'')+'" placeholder="—"'
+        +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'weight\',this.value,'+weekOff+')">'
+        +'<input class="log-field-input" type="number" min="0"'
+        +' value="'+(set.reps||'')+'" placeholder="—"'
+        +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'reps\',this.value,'+weekOff+')">'
+        +'</div>';
+    });
+    html+='</div></div>';
+  });
+
+  html+='<div style="margin-top:16px;"><span class="sec-label">메모</span>'
+    +'<textarea class="inp" rows="2" placeholder="오늘의 컨디션, 느낀 점…"'
+    +' oninput="updateNotesWeek('+dayIdx+',this.value,'+weekOff+')">'+(dl.notes||'')+'</textarea></div>'
+    +'<div class="log-bottom">'
+    +'<button class="btn btn-primary" onclick="'+saveF+'">💾 저장</button>'
+    +'</div>';
+
+  body.innerHTML=html;
+}
+
+window.updateSetFieldWeek=function(di,ei,si,field,val,weekOff){
+  const wl=getWeekLog(weekOff);const dl=wl.days[di]||{};
+  if(!dl.log||!dl.log[ei])return;
+  dl.log[ei].sets[si][field]=val;
+  wl.days[di]=dl;setWeekLogLocal(wl,weekOff);
+};
+window.updateNotesWeek=function(di,val,weekOff){
+  const wl=getWeekLog(weekOff);wl.days[di]=wl.days[di]||{};wl.days[di].notes=val;setWeekLogLocal(wl,weekOff);
+};
+window.toggleExDoneTodayWeek=function(di,ei,weekOff){
+  const wl=getWeekLog(weekOff);const dl=wl.days[di]||{};if(!dl.log)return;
+  dl.log[ei].done=!dl.log[ei].done;wl.days[di]=dl;setWeekLogLocal(wl,weekOff);
+  renderToday();
+};
+
+window.toggleTodayDone=async function(di,weekOff){
+  if(weekOff===undefined)weekOff=0;
+  const wl=getWeekLog(weekOff);const dl=wl.days[di]||{};
+  dl.done=!dl.done;wl.days[di]=dl;setWeekLogLocal(wl,weekOff);
+  await saveWeekLog(weekOff);renderToday();toast(dl.done?'✓ 완료!':'완료 취소',dl.done?'var(--green)':'var(--ac)');
 };
 window.toggleExDoneToday=function(di,ei){
   const wl=getWeekLog(0);const dl=wl.days[di]||{};if(!dl.log)return;
   dl.log[ei].done=!dl.log[ei].done;wl.days[di]=dl;setWeekLogLocal(wl,0);
-  const body=document.getElementById('today-log-body');
-  const prog=wl.progId?programs.find(function(p){return p.id===wl.progId;}):null;
-  if(prog&&body)renderLogBody(body,dl,prog.days[Math.min(di,4)],wl,di,true);
+  renderToday();
 };
 window.saveTodayLog=async function(di){
   await saveWeekLog(0);renderToday();toast('✓ 저장됨','var(--green)');
+};
+window.saveTodayLogWeek=async function(di,weekOff){
+  if(weekOff===undefined)weekOff=0;
+  await saveWeekLog(weekOff);renderToday();toast('✓ 저장됨','var(--green)');
 };
 
 /* ── 초기 캐시 로드 ── */
 programs=lsLoad('rtp_programs_tiger')||[];
 logs=lsLoad('rtp_logs_tiger')||{};
+
+window.onTodayDateChange=function(val){
+  todaySelectedDate=val||null;
+  renderToday();
+};
 </script>
 </body>
 </html>
