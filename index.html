@@ -493,36 +493,29 @@ document.dispatchEvent(new Event('firebase-ready'));
 const DAYS_KO=['월','화','수','목','금','토','일'];
 let programs=[], logs={};
 let editingProgId=null, editingDayIdx=0, weekOffset=0, logOpenDay=null, weekProgId=null;
-let _fbReady=false;
+let currentUser='tiger';
 
-// ── LocalStorage fallback (while Firebase loads) ──
+/* ── 유틸 ── */
 function lsLoad(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}}
 function lsSave(k,v){localStorage.setItem(k,JSON.stringify(v));}
-
 function uid(){return 'p'+Date.now()+Math.random().toString(36).slice(2,6);}
 function toISO(d){return d.toISOString().slice(0,10);}
 function fmt(d){return (d.getMonth()+1)+'/'+d.getDate();}
-function fmtDate(s){
-  if(!s)return '';
-  const d=new Date(s+'T00:00:00');
-  return (d.getMonth()+1)+'월 '+d.getDate()+'일';
-}
+function fmtDate(s){if(!s)return '';const d=new Date(s+'T00:00:00');return (d.getMonth()+1)+'월 '+d.getDate()+'일';}
 function toast(msg,col){
   const t=document.getElementById('toast');
-  t.textContent=msg;
-  t.style.borderLeftColor=col||'var(--ac)';
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2200);
+  t.textContent=msg;t.style.borderLeftColor=col||'var(--ac)';
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);
 }
-function showLoading(show){
+function showLoading(v){
   let el=document.getElementById('loading-bar');
   if(!el){el=document.createElement('div');el.id='loading-bar';
     el.style.cssText='position:fixed;top:0;left:0;right:0;height:3px;background:var(--ac);z-index:9999;transition:opacity .3s;';
     document.body.appendChild(el);}
-  el.style.opacity=show?'1':'0';
+  el.style.opacity=v?'1':'0';
 }
 
-// ── Week helpers ──
+/* ── 주간 헬퍼 ── */
 function getWeekDates(off){
   if(off===undefined)off=weekOffset;
   const n=new Date(),day=n.getDay();
@@ -530,18 +523,9 @@ function getWeekDates(off){
   mon.setDate(n.getDate()-((day+6)%7)+off*7);
   return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});
 }
-function weekKey(off){
-  if(off===undefined)off=weekOffset;
-  return getWeekDates(off)[0].toISOString().slice(0,10);
-}
-function getWeekLog(off){
-  if(off===undefined)off=weekOffset;
-  return logs[weekKey(off)]||{progId:null,days:{}};
-}
-function setWeekLogLocal(wl,off){
-  if(off===undefined)off=weekOffset;
-  logs[weekKey(off)]=wl;
-}
+function weekKey(off){if(off===undefined)off=weekOffset;return getWeekDates(off)[0].toISOString().slice(0,10);}
+function getWeekLog(off){if(off===undefined)off=weekOffset;return logs[weekKey(off)]||{progId:null,days:{}};}
+function setWeekLogLocal(wl,off){if(off===undefined)off=weekOffset;logs[weekKey(off)]=wl;}
 function getActiveProg(off){
   if(off===undefined)off=0;
   const dates=getWeekDates(off);
@@ -549,13 +533,14 @@ function getActiveProg(off){
   return programs.find(p=>p.startDate&&p.endDate&&wkMon<=p.endDate&&wkSun>=p.startDate)||null;
 }
 
-// ── Firebase persistence ──
+/* ── Firebase 저장/로드 ── */
+function userPath(){return 'users/'+window._userId;}
 async function savePrograms(){
   showLoading(true);
   for(const p of programs){
-    await window.fsSet('users/'+window._userId+'/programs/'+p.id, p);
+    await window.fsSet(userPath()+'/programs/'+p.id, p);
   }
-  lsSave('rtp_programs', programs); // local cache
+  lsSave('rtp_programs_'+currentUser, programs);
   showLoading(false);
 }
 async function saveWeekLog(off){
@@ -563,88 +548,68 @@ async function saveWeekLog(off){
   const wk=weekKey(off);
   const wl=logs[wk]||{progId:null,days:{}};
   showLoading(true);
-  await window.fsSet('users/'+window._userId+'/logs/'+wk, wl);
-  lsSave('rtp_logs', logs); // local cache
+  await window.fsSet(userPath()+'/logs/'+wk, wl);
+  lsSave('rtp_logs_'+currentUser, logs);
   showLoading(false);
 }
 async function deleteProgFromFirestore(id){
-  await window.fsDelete('users/'+window._userId+'/programs/'+id);
+  await window.fsDelete(userPath()+'/programs/'+id);
 }
 async function loadAllData(){
   showLoading(true);
-  try {
-    // load programs
-    const progs = await window.fsGetAll('users/'+window._userId+'/programs');
-    if(progs.length>0){
-      programs=progs;
-      lsSave('rtp_programs',programs);
-    } else {
-      // fallback to localStorage
-      programs=lsLoad('rtp_programs')||[];
-    }
-    // load logs
-    const logDocs = await window.fsGetAll('users/'+window._userId+'/logs');
+  try{
+    const progs=await window.fsGetAll(userPath()+'/programs');
+    programs=progs.length>0?progs:(lsLoad('rtp_programs_'+currentUser)||[]);
+    lsSave('rtp_programs_'+currentUser,programs);
+    const logDocs=await window.fsGetAll(userPath()+'/logs');
     logs={};
-    logDocs.forEach(l=>{
-      const id=l.id;
-      delete l.id;
-      logs[id]=l;
-    });
-    if(!logDocs.length){
-      logs=lsLoad('rtp_logs')||{};
-    }
-    lsSave('rtp_logs',logs);
-  } catch(e){
-    console.warn('Firebase load failed, using localStorage:', e);
-    programs=lsLoad('rtp_programs')||[];
-    logs=lsLoad('rtp_logs')||{};
+    logDocs.forEach(l=>{const id=l.id;delete l.id;logs[id]=l;});
+    if(!logDocs.length)logs=lsLoad('rtp_logs_'+currentUser)||{};
+    lsSave('rtp_logs_'+currentUser,logs);
+  }catch(err){
+    console.warn('Firebase 실패, localStorage 사용:', err);
+    programs=lsLoad('rtp_programs_'+currentUser)||[];
+    logs=lsLoad('rtp_logs_'+currentUser)||{};
   }
   showLoading(false);
 }
 
-/* COVER */
-let currentUser = 'tiger'; // 'tiger' | 'pig'
-
-window.showChoice = function(){
-  document.getElementById('cover-phase1').style.display = 'none';
-  document.getElementById('cover-phase2').style.display = 'flex';
+/* ── 표지 ── */
+window.showChoice=function(){
+  document.getElementById('cover-phase1').style.display='none';
+  document.getElementById('cover-phase2').style.display='flex';
 };
-
-window.enterAs = function(user){
-  currentUser = user;
-  window._userId = user; // Firestore path key
-  const badge = document.getElementById('user-badge');
+window.enterAs=function(user){
+  currentUser=user;
+  window._userId=user;
+  const badge=document.getElementById('user-badge');
   if(badge){
-    badge.innerHTML = user === 'tiger'
-      ? '<span class="user-badge-icon">🐯</span> TIGER'
-      : '<span class="user-badge-icon">🐷</span> PIG';
-    badge.style.color = user === 'tiger' ? 'var(--ac)' : '#ff69b4';
+    badge.innerHTML=user==='tiger'
+      ?'<span class="user-badge-icon">🐯</span> TIGER'
+      :'<span class="user-badge-icon">🐷</span> PIG';
+    badge.style.color=user==='tiger'?'var(--ac)':'#ff69b4';
   }
-  const c = document.getElementById('cover');
+  const c=document.getElementById('cover');
   c.classList.add('exit');
   setTimeout(async ()=>{
-    c.style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    // reset data for this user
-    programs = [];
-    logs = {};
+    c.style.display='none';
+    document.getElementById('app').style.display='block';
+    programs=[];logs={};
     await loadAllData();
     renderProgList();
     renderToday();
-  }, 440);
+  },440);
 };
-
-window.goHome = function(){
-  document.getElementById('app').style.display = 'none';
-  const cover = document.getElementById('cover');
+window.goHome=function(){
+  document.getElementById('app').style.display='none';
+  const cover=document.getElementById('cover');
   cover.classList.remove('exit');
-  cover.style.display = 'flex';
-  // reset to phase 1
-  document.getElementById('cover-phase1').style.display = 'block';
-  document.getElementById('cover-phase2').style.display = 'none';
+  cover.style.display='flex';
+  document.getElementById('cover-phase1').style.display='block';
+  document.getElementById('cover-phase2').style.display='none';
 };
 
-/* TABS */
+/* ── 탭 ── */
 window.switchTab=function(name,el){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
@@ -655,7 +620,10 @@ window.switchTab=function(name,el){
   if(name==='program')renderProgList();
 };
 
-/* ══ PROGRAM LIST ══ */
+/* ══════════════════════════════════
+   프로그램 설계
+   운동명 + 세트 수 + 휴식시간만
+══════════════════════════════════ */
 function renderProgList(){
   const el=document.getElementById('prog-list');
   el.innerHTML='';
@@ -682,12 +650,9 @@ function renderProgList(){
       +'<div class="prog-item-name">'+p.name+'</div>'
       +'<div class="prog-item-meta">'+p.days.filter(function(d){return d.exercises.length;}).length+'/5일 구성</div>';
     const delBtn=document.createElement('button');
-    delBtn.className='btn btn-sm btn-danger';
-    delBtn.innerHTML='✕';
+    delBtn.className='btn btn-sm btn-danger';delBtn.innerHTML='✕';
     delBtn.addEventListener('click',function(e){e.stopPropagation();deleteProgram(p.id);});
-    const actDiv=document.createElement('div');
-    actDiv.className='prog-item-actions';
-    actDiv.appendChild(delBtn);
+    const actDiv=document.createElement('div');actDiv.className='prog-item-actions';actDiv.appendChild(delBtn);
     div.appendChild(actDiv);
     div.addEventListener('click',function(){openEditor(p.id);});
     el.appendChild(div);
@@ -696,20 +661,23 @@ function renderProgList(){
 
 window.newProgram=function(){
   const p={id:uid(),name:'새 프로그램',startDate:'',endDate:'',
-    days:Array.from({length:5},function(_,i){return {label:'Day '+(i+1),exercises:[],
-      fields:[{id:'sets',label:'세트',type:'number'},{id:'reps',label:'횟수',type:'number'},{id:'weight',label:'무게(kg)',type:'number'}]};})};
-  programs.push(p);
-  renderProgList();
-  openEditor(p.id);
+    days:Array.from({length:5},function(_,i){
+      return {
+        label:'Day '+(i+1),
+        exercises:[]
+        // 필드 없음 — 프로그램 설계는 운동명+세트+휴식시간 고정
+      };
+    })
+  };
+  programs.push(p);renderProgList();openEditor(p.id);
 };
 window.deleteProgram=async function(id){
   if(!confirm('삭제할까요?'))return;
   programs=programs.filter(function(p){return p.id!==id;});
   await deleteProgFromFirestore(id);
-  lsSave('rtp_programs',programs);
+  lsSave('rtp_programs_'+currentUser,programs);
   if(editingProgId===id){editingProgId=null;renderEditorEmpty();}
-  renderProgList();
-  toast('🗑 삭제됨');
+  renderProgList();toast('🗑 삭제됨');
 };
 function renderEditorEmpty(){
   document.getElementById('prog-editor').innerHTML=
@@ -720,6 +688,7 @@ function renderEditorEmpty(){
 function openEditor(id){editingProgId=id;editingDayIdx=0;renderProgList();renderEditor();}
 function getProg(){return programs.find(function(p){return p.id===editingProgId;});}
 
+/* 에디터 렌더: 운동명 + 세트 + 휴식시간 */
 function renderEditor(){
   const p=getProg();if(!p){renderEditorEmpty();return;}
   const dayTabs=p.days.map(function(d,i){
@@ -727,30 +696,22 @@ function renderEditor(){
       +'DAY '+(i+1)+(d.label!=='Day '+(i+1)?' · '+d.label:'')+'</button>';
   }).join('');
   const day=p.days[editingDayIdx];
-  const colT='140px '+day.fields.map(function(){return '80px';}).join(' ')+' 32px';
-  const fieldChips=day.fields.map(function(f,fi){
-    return '<div class="field-chip"><span>'+f.label+'</span>'
-      +'<button class="chip-rm" onclick="removeField('+fi+')">✕</button></div>';
-  }).join('');
-  const headCols='<span>운동 이름</span>'+day.fields.map(function(f){
-    return '<span style="text-align:center">'+f.label+'</span>';
-  }).join('')+'<span></span>';
-  let exRowsHtml='<div style="padding:16px 12px;color:var(--t2);font-size:12px;font-family:var(--fm);">운동을 추가하세요</div>';
-  if(day.exercises.length){
-    exRowsHtml=day.exercises.map(function(ex,ei){
-      const fcells=day.fields.map(function(f){
-        const fid=f.id;
-        const val=ex[fid]||'';
-        const cb='updateEx('+ei+',\''+fid+'\',this.value)';
-        return '<input value="'+val+'" placeholder="—" type="'+(f.type||'text')+'" '
-          +'oninput="'+cb+'" style="text-align:center;font-family:var(--fm);font-size:12px;">';
-      }).join('');
+
+  // 운동 목록 테이블: 운동명 | 세트 | 휴식(초)
+  const colT='1fr 80px 90px 32px';
+  const exRowsHtml=day.exercises&&day.exercises.length
+    ?day.exercises.map(function(ex,ei){
       return '<div class="ex-row" style="grid-template-columns:'+colT+'">'
         +'<input value="'+(ex.name||'')+'" placeholder="운동 이름" oninput="updateEx('+ei+',\'name\',this.value)">'
-        +fcells
-        +'<button class="btn btn-sm btn-danger" onclick="removeEx('+ei+')" style="padding:3px 7px;">✕</button></div>';
-    }).join('');
-  }
+        +'<input value="'+(ex.sets||'')+'" placeholder="3" type="number" min="1"'
+        +' oninput="updateEx('+ei+',\'sets\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
+        +'<input value="'+(ex.rest||'')+'" placeholder="90" type="number" min="0"'
+        +' oninput="updateEx('+ei+',\'rest\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
+        +'<button class="btn btn-sm btn-danger" onclick="removeEx('+ei+')" style="padding:3px 7px;">✕</button>'
+        +'</div>';
+    }).join('')
+    :'<div style="padding:16px 12px;color:var(--t2);font-size:12px;font-family:var(--fm);">운동을 추가하세요</div>';
+
   document.getElementById('prog-editor').innerHTML=
     '<div class="card hot-card"><div class="card-head" style="flex-wrap:wrap;gap:10px;">'
     +'<div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">'
@@ -769,12 +730,11 @@ function renderEditor(){
     +'<span class="sec-label">운동일</span><div class="day-tabs">'+dayTabs+'</div>'
     +'<div style="margin-bottom:16px;"><span class="sec-label">Day '+(editingDayIdx+1)+' 이름</span>'
     +'<input class="inp inp-sm" value="'+day.label+'" placeholder="예: 가슴&삼두, 하체…" oninput="updateDayLabel(this.value)"></div>'
-    +'<span class="sec-label">측정 필드</span>'
-    +'<div class="field-chips">'+fieldChips+'<button class="field-chip-add" onclick="showAddField()">+ 추가</button></div>'
-    +'<div id="add-field-area"></div>'
     +'<span class="sec-label">운동 목록</span>'
     +'<div style="border:1px solid var(--b1);border-radius:var(--r);overflow:hidden;margin-bottom:10px;">'
-    +'<div class="ex-table-head" style="grid-template-columns:'+colT+'">'+headCols+'</div>'
+    +'<div class="ex-table-head" style="grid-template-columns:'+colT+'">'
+    +'<span>운동 이름</span><span style="text-align:center">세트</span><span style="text-align:center">휴식(초)</span><span></span>'
+    +'</div>'
     +'<div id="ex-rows">'+exRowsHtml+'</div></div>'
     +'<button class="btn btn-ghost btn-sm" onclick="addEx()" style="width:100%;justify-content:center;border-style:dashed;">+ 운동 추가</button>'
     +'</div></div>';
@@ -787,51 +747,20 @@ window.updateDayLabel=function(v){const p=getProg();if(p)p.days[editingDayIdx].l
 window.updateEx=function(ei,f,v){const p=getProg();if(p)p.days[editingDayIdx].exercises[ei][f]=v;};
 window.addEx=function(){
   const p=getProg();if(!p)return;
-  const day=p.days[editingDayIdx];
-  const ex={name:''};day.fields.forEach(function(f){ex[f.id]='';});
-  day.exercises.push(ex);renderEditor();
+  if(!p.days[editingDayIdx].exercises)p.days[editingDayIdx].exercises=[];
+  p.days[editingDayIdx].exercises.push({name:'',sets:'',rest:''});
+  renderEditor();
 };
 window.removeEx=function(ei){const p=getProg();if(!p)return;p.days[editingDayIdx].exercises.splice(ei,1);renderEditor();};
-window.showAddField=function(){
-  document.getElementById('add-field-area').innerHTML=
-    '<div class="field-add-row">'
-    +'<div style="flex:1"><span class="sec-label">필드 이름</span>'
-    +'<input class="inp inp-sm" id="nf-label" placeholder="예: RPE, 휴식시간"></div>'
-    +'<div style="width:96px"><span class="sec-label">타입</span>'
-    +'<select class="inp inp-sm" id="nf-type"><option value="number">숫자</option><option value="text">텍스트</option></select></div>'
-    +'<button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="addField()">추가</button>'
-    +'<button class="btn btn-ghost btn-sm" style="align-self:flex-end" onclick="cancelField()">취소</button>'
-    +'</div>';
-};
-window.cancelField=function(){document.getElementById('add-field-area').innerHTML='';};
-window.addField=function(){
-  const label=document.getElementById('nf-label').value.trim();
-  const type=document.getElementById('nf-type').value;
-  if(!label){toast('필드 이름을 입력하세요');return;}
-  const p=getProg();if(!p)return;
-  const day=p.days[editingDayIdx];
-  const id='f'+Date.now();
-  day.fields.push({id:id,label:label,type:type});
-  day.exercises.forEach(function(ex){ex[id]='';});
-  renderEditor();
-};
-window.removeField=function(fi){
-  const p=getProg();if(!p)return;
-  const day=p.days[editingDayIdx];
-  const fid=day.fields[fi].id;
-  day.fields.splice(fi,1);
-  day.exercises.forEach(function(ex){delete ex[fid];});
-  renderEditor();
-};
 window.saveProgram=async function(){
   const p=getProg();if(!p)return;
   if(!p.name.trim()){toast('프로그램 이름을 입력하세요');return;}
-  await savePrograms();
-  renderProgList();
-  toast('✓ Firestore에 저장됨','var(--green)');
+  await savePrograms();renderProgList();toast('✓ Firestore에 저장됨','var(--green)');
 };
 
-/* ══ LOG TAB ══ */
+/* ══════════════════════════════════
+   주간 기록 탭
+══════════════════════════════════ */
 function renderLog(){
   logOpenDay=null;
   document.getElementById('log-panel').classList.remove('on');
@@ -839,35 +768,26 @@ function renderLog(){
   const dates=getWeekDates();
   const wkMon=toISO(dates[0]),wkSun=toISO(dates[6]);
   document.getElementById('week-title').innerHTML='<em>'+dates[0].getFullYear()+'</em> '+fmt(dates[0])+' — '+fmt(dates[6]);
-
-  if(!weekProgId){
-    const auto=getActiveProg();
-    if(auto){weekProgId=auto.id;wl.progId=auto.id;setWeekLogLocal(wl);}
-  }
-
+  if(!weekProgId){const auto=getActiveProg();if(auto){weekProgId=auto.id;wl.progId=auto.id;setWeekLogLocal(wl);}}
   const chips=document.getElementById('prog-chips');chips.innerHTML='';
   if(!programs.length){
     chips.innerHTML='<span style="color:var(--t3);font-size:11px;font-family:var(--fm);">프로그램 없음</span>';
-  } else {
+  }else{
     const sorted=[...programs].sort(function(a,b){
       if(!a.startDate&&!b.startDate)return 0;if(!a.startDate)return 1;if(!b.startDate)return -1;
       return b.startDate.localeCompare(a.startDate);
     });
-    const nb=document.createElement('button');
-    nb.className='prog-chip'+(weekProgId===null?' on':'');
+    const nb=document.createElement('button');nb.className='prog-chip'+(weekProgId===null?' on':'');
     nb.textContent='없음';nb.onclick=function(){setWeekProg(null);};chips.appendChild(nb);
     sorted.forEach(function(p){
       const isMatch=p.startDate&&p.endDate&&wkMon<=p.endDate&&wkSun>=p.startDate;
-      const c=document.createElement('button');
-      c.className='prog-chip'+(weekProgId===p.id?' on':'');
-      c.textContent=p.name+(isMatch?' ●':'');
-      c.onclick=function(){setWeekProg(p.id);};chips.appendChild(c);
+      const c=document.createElement('button');c.className='prog-chip'+(weekProgId===p.id?' on':'');
+      c.textContent=p.name+(isMatch?' ●':'');c.onclick=function(){setWeekProg(p.id);};chips.appendChild(c);
     });
   }
   const selProg=weekProgId?programs.find(function(p){return p.id===weekProgId;}):null;
   const di=document.getElementById('prog-date-info');
-  if(di)di.textContent=(selProg&&selProg.startDate&&selProg.endDate)
-    ?fmtDate(selProg.startDate)+' — '+fmtDate(selProg.endDate):'';
+  if(di)di.textContent=(selProg&&selProg.startDate&&selProg.endDate)?fmtDate(selProg.startDate)+' — '+fmtDate(selProg.endDate):'';
   renderDayGrid();renderStats();
 }
 
@@ -886,11 +806,13 @@ function renderDayGrid(){
     const pd=(!isWeekend&&workoutIdx<5&&prog)?prog.days[workoutIdx]:null;
     if(!isWeekend&&workoutIdx<5)workoutIdx++;
     const isDone=!!dl.done;
-    const hasLog=dl.log&&dl.log.some(function(r){return Object.values(r).some(function(v){return v&&v!==''&&v!==false;});});
+    const hasLog=dl.log&&dl.log.some(function(r){
+      return r.sets&&r.sets.some&&r.sets.some(function(s){return s.weight||s.reps;});
+    });
     const card=document.createElement('div');
     card.className='day-card'+(logOpenDay===i?' open':'')+(isDone?' done':'')+(isWeekend?' is-weekend':'')+(isToday?' is-today':'');
     const dotCls=isDone?'done':hasLog?'has':'';
-    const preview=pd&&pd.exercises.length
+    const preview=pd&&pd.exercises&&pd.exercises.length
       ?'<strong>'+(pd.exercises[0].name||'운동')+'</strong>'+(pd.exercises.length>1?' 외 '+(pd.exercises.length-1)+'종목':'')
       :(isWeekend?'<span style="color:var(--t3);">휴식</span>':'<span style="color:var(--t3);">기록 없음</span>');
     card.innerHTML='<div class="day-card-head"><div>'
@@ -911,9 +833,11 @@ function renderStats(){
   const wl=getWeekLog();let done=0,sets=0,vol=0;
   for(let i=0;i<7;i++){
     const dl=wl.days[i]||{};if(dl.done)done++;
-    (dl.log||[]).forEach(function(row){
-      const s=parseInt(row.sets)||0,r=parseInt(row.reps)||0,w=parseFloat(row.weight)||0;
-      sets+=s;vol+=s*r*w;
+    (dl.log||[]).forEach(function(ex){
+      (ex.sets||[]).forEach(function(set){
+        sets++;
+        vol+=(parseFloat(set.weight)||0)*(parseInt(set.reps)||0);
+      });
     });
   }
   const pct=Math.round(done/5*100);
@@ -944,53 +868,108 @@ function openLogPanel(i){
 }
 window.closeLogPanel=function(){logOpenDay=null;document.getElementById('log-panel').classList.remove('on');renderDayGrid();};
 
-function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
-  const fields=pd.fields;
-  if(!dl.log||dl.log.length!==pd.exercises.length){
-    dl.log=pd.exercises.map(function(ex,ei){
-      const sv=(dl.log||[])[ei]||{};
-      const row={name:ex.name};
-      fields.forEach(function(f){row[f.id]=sv[f.id]!==undefined?sv[f.id]:'';});
-      row._done=sv._done||false;return row;
-    });
-    wl.days[dayIdx]=dl;setWeekLogLocal(wl);
-  }
-  const colT='1fr '+fields.map(function(){return '72px';}).join(' ')+' 32px';
-  const saveF=isToday?'saveTodayLog('+dayIdx+')':'saveLogDay('+dayIdx+')';
-  const chkF=isToday?'toggleExDoneToday':'toggleExDone';
-  const headCols='<span>운동</span>'+fields.map(function(f){return '<span style="text-align:center">'+f.label+'</span>';}).join('')+'<span></span>';
-  const rows=dl.log.map(function(row,ri){
-    const fcells=fields.map(function(f){
-      const fid=f.id;
-      const val=(row[fid]!==undefined&&row[fid]!=='')?row[fid]:'';
-      const ph=(pd.exercises[ri]&&pd.exercises[ri][fid])||'—';
-      return '<input class="log-field-input" type="'+(f.type||'number')+'" value="'+val+'" placeholder="'+ph+'" '
-        +'oninput="updateLogField('+dayIdx+','+ri+',\''+fid+'\',this.value)">';
-    }).join('');
-    return '<div class="log-ex-row" style="grid-template-columns:'+colT+'">'
-      +'<div class="log-ex-name">'+(row.name||'운동')+'</div>'
-      +fcells
-      +'<button class="log-check'+(row._done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ri+')">'+(row._done?'✓':'')+'</button>'
-      +'</div>';
-  }).join('');
-  body.innerHTML='<div class="log-ex-head" style="grid-template-columns:'+colT+'">'+headCols+'</div>'
-    +'<div>'+rows+'</div>'
-    +'<div style="margin-top:16px;"><span class="sec-label">메모</span>'
-    +'<textarea class="inp" rows="3" placeholder="오늘의 컨디션, 느낀 점…" oninput="updateNotes('+dayIdx+',this.value)">'+(dl.notes||'')+'</textarea></div>'
-    +'<div class="log-bottom"><button class="btn btn-primary" onclick="'+saveF+'">💾 저장</button>'
-    +'<span style="font-size:11px;color:var(--t2);font-family:var(--fm);">placeholder = 계획값</span></div>';
+/* ══════════════════════════════════
+   운동 기록 렌더
+   운동명(고정) + 세트별 중량·횟수
+══════════════════════════════════ */
+function makeEmptyLog(pd){
+  return (pd.exercises||[]).map(function(ex){
+    const sets=parseInt(ex.sets)||3;
+    return {
+      name:ex.name,
+      rest:ex.rest||'',
+      sets:Array.from({length:sets},function(){return {weight:'',reps:'',done:false};})
+    };
+  });
 }
 
-window.updateLogField=function(di,ri,fid,val){
+function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
+  // 빈 로그 초기화
+  if(!dl.log||dl.log.length!==pd.exercises.length){
+    dl.log=makeEmptyLog(pd);
+    wl.days[dayIdx]=dl;setWeekLogLocal(wl);
+  }
+  const saveF=isToday?'saveTodayLog('+dayIdx+')':'saveLogDay('+dayIdx+')';
+  const chkF=isToday?'toggleExDoneToday':'toggleExDone';
+
+  let html='';
+  dl.log.forEach(function(ex,ei){
+    const sets=parseInt(pd.exercises[ei]&&pd.exercises[ei].sets)||ex.sets.length||3;
+    const rest=pd.exercises[ei]&&pd.exercises[ei].rest?pd.exercises[ei].rest+'초':'—';
+    html+='<div class="log-ex-block">'
+      // 운동 헤더
+      +'<div class="log-ex-header">'
+      +'<div class="log-ex-header-left">'
+      +'<div class="log-ex-title">'+(ex.name||'운동')+'</div>'
+      +'<div class="log-ex-meta">'+sets+'세트 · 휴식 '+rest+'</div>'
+      +'</div>'
+      +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+')">'+(ex.done?'✓':'')+'</button>'
+      +'</div>'
+      // 세트별 중량·횟수 테이블
+      +'<div class="log-sets-table">'
+      +'<div class="log-sets-head"><span>SET</span><span>중량(kg)</span><span>횟수</span></div>';
+
+    ex.sets.forEach(function(set,si){
+      html+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
+        +'<div class="log-set-num">'+(si+1)+'</div>'
+        +'<input class="log-field-input" type="number" min="0" step="0.5"'
+        +' value="'+(set.weight||'')+'" placeholder="—"'
+        +' oninput="updateSetField('+dayIdx+','+ei+','+si+',\'weight\',this.value)">'
+        +'<input class="log-field-input" type="number" min="0"'
+        +' value="'+(set.reps||'')+'" placeholder="—"'
+        +' oninput="updateSetField('+dayIdx+','+ei+','+si+',\'reps\',this.value)">'
+        +'</div>';
+    });
+
+    html+='</div></div>'; // log-sets-table, log-ex-block
+  });
+
+  html+='<div style="margin-top:16px;"><span class="sec-label">메모</span>'
+    +'<textarea class="inp" rows="2" placeholder="오늘의 컨디션, 느낀 점…"'
+    +' oninput="updateNotes('+dayIdx+',this.value)">'+(dl.notes||'')+'</textarea></div>'
+    +'<div class="log-bottom">'
+    +'<button class="btn btn-primary" onclick="'+saveF+'">💾 저장</button>'
+    +'</div>';
+
+  body.innerHTML=html;
+}
+
+// CSS 동적 추가 (세트별 입력 UI)
+(function(){
+  if(document.getElementById('log-body-styles'))return;
+  const s=document.createElement('style');s.id='log-body-styles';
+  s.textContent=`
+.log-ex-block{background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:12px;overflow:hidden;}
+.log-ex-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--b1);}
+.log-ex-header-left{}
+.log-ex-title{font-size:15px;font-weight:600;color:var(--t1);margin-bottom:2px;}
+.log-ex-meta{font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.08em;}
+.log-sets-table{padding:10px 16px;}
+.log-sets-head{display:grid;grid-template-columns:36px 1fr 1fr;gap:8px;
+  font-family:var(--fm);font-size:10px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--t3);padding:0 0 6px;border-bottom:1px solid var(--b1);margin-bottom:4px;}
+.log-set-row{display:grid;grid-template-columns:36px 1fr 1fr;gap:8px;align-items:center;padding:5px 0;
+  border-bottom:1px solid rgba(37,37,48,.4);}
+.log-set-row:last-child{border-bottom:none;}
+.log-set-num{font-family:var(--fm);font-size:12px;color:var(--t3);text-align:center;}
+.set-done .log-set-num{color:var(--green);}
+.set-done .log-field-input{border-color:rgba(34,209,122,.3);color:var(--green);}
+`;
+  document.head.appendChild(s);
+})();
+
+window.updateSetField=function(di,ei,si,field,val){
   const wl=getWeekLog();const dl=wl.days[di]||{};
-  if(!dl.log)return;dl.log[ri][fid]=val;wl.days[di]=dl;setWeekLogLocal(wl);
+  if(!dl.log||!dl.log[ei])return;
+  dl.log[ei].sets[si][field]=val;
+  wl.days[di]=dl;setWeekLogLocal(wl);
 };
 window.updateNotes=function(di,val){
   const wl=getWeekLog();wl.days[di]=wl.days[di]||{};wl.days[di].notes=val;setWeekLogLocal(wl);
 };
-window.toggleExDone=function(di,ri){
+window.toggleExDone=function(di,ei){
   const wl=getWeekLog();const dl=wl.days[di]||{};if(!dl.log)return;
-  dl.log[ri]._done=!dl.log[ri]._done;wl.days[di]=dl;setWeekLogLocal(wl);openLogPanel(di);
+  dl.log[ei].done=!dl.log[ei].done;wl.days[di]=dl;setWeekLogLocal(wl);openLogPanel(di);
 };
 window.toggleDone=function(){
   const wl=getWeekLog();const dl=wl.days[logOpenDay]||{};
@@ -998,15 +977,13 @@ window.toggleDone=function(){
   openLogPanel(logOpenDay);renderDayGrid();renderStats();
 };
 window.saveLogDay=async function(i){
-  const off=weekOffset;
-  setWeekLogLocal(getWeekLog(),off);
-  await saveWeekLog(off);
-  renderDayGrid();renderStats();
-  toast('✓ Firestore에 저장됨','var(--green)');
+  await saveWeekLog(weekOffset);renderDayGrid();renderStats();toast('✓ 저장됨','var(--green)');
 };
 window.changeWeek=function(dir){weekOffset+=dir;renderLog();};
 
-/* ══ TODAY TAB ══ */
+/* ══════════════════════════════════
+   오늘의 기록 탭
+══════════════════════════════════ */
 function renderToday(){
   const todayDate=new Date();
   const todayStr=toISO(todayDate);
@@ -1021,8 +998,7 @@ function renderToday(){
   const strip=document.getElementById('today-week-strip');
   strip.innerHTML='';
   wkDates.forEach(function(d,i){
-    const isToday=toISO(d)===todayStr;
-    const dl=wl.days[i]||{};
+    const isToday=toISO(d)===todayStr;const dl=wl.days[i]||{};
     const div=document.createElement('div');
     div.className='twday'+(isToday?' is-today':'')+(dl.done?' is-done':'');
     div.innerHTML='<div class="twday-name">'+DAYS_KO[i]+'</div><div class="twday-date">'+fmt(d)+'</div>';
@@ -1072,25 +1048,22 @@ function renderToday(){
 window.toggleTodayDone=async function(di){
   const wl=getWeekLog(0);const dl=wl.days[di]||{};
   dl.done=!dl.done;wl.days[di]=dl;setWeekLogLocal(wl,0);
-  await saveWeekLog(0);
-  renderToday();toast(dl.done?'✓ 오늘 운동 완료!':'완료 취소', dl.done?'var(--green)':'var(--ac)');
+  await saveWeekLog(0);renderToday();toast(dl.done?'✓ 오늘 운동 완료!':'완료 취소',dl.done?'var(--green)':'var(--ac)');
 };
-window.toggleExDoneToday=function(di,ri){
+window.toggleExDoneToday=function(di,ei){
   const wl=getWeekLog(0);const dl=wl.days[di]||{};if(!dl.log)return;
-  dl.log[ri]._done=!dl.log[ri]._done;wl.days[di]=dl;setWeekLogLocal(wl,0);
+  dl.log[ei].done=!dl.log[ei].done;wl.days[di]=dl;setWeekLogLocal(wl,0);
   const body=document.getElementById('today-log-body');
   const prog=wl.progId?programs.find(function(p){return p.id===wl.progId;}):null;
   if(prog&&body)renderLogBody(body,dl,prog.days[Math.min(di,4)],wl,di,true);
 };
 window.saveTodayLog=async function(di){
-  setWeekLogLocal(getWeekLog(0),0);
-  await saveWeekLog(0);
-  renderToday();toast('✓ Firestore에 저장됨','var(--green)');
+  await saveWeekLog(0);renderToday();toast('✓ 저장됨','var(--green)');
 };
 
-// 초기 로드 (로컬스토리지 캐시로 빠르게 먼저 표시)
-programs=lsLoad('rtp_programs')||[];
-logs=lsLoad('rtp_logs')||{};
+/* ── 초기 캐시 로드 ── */
+programs=lsLoad('rtp_programs_tiger')||[];
+logs=lsLoad('rtp_logs_tiger')||{};
 </script>
 </body>
 </html>
