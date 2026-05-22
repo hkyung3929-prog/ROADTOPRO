@@ -736,7 +736,7 @@ function renderEditor(){
         const isCardio=(ex.exType==='cardio');
         return '<div class="ex-row" style="grid-template-columns:'+colT+'">'
           +'<input value="'+(ex.name||'')+'" placeholder="운동 이름" oninput="updateEx('+ei+',\'name\',this.value)">'
-          +'<select style="text-align:center;font-family:var(--fm);font-size:11px;background:var(--s3);border:1px solid var(--b1);border-radius:4px;color:'+(isCardio?'var(--ac2)':'var(--t1)')+';padding:4px 2px;cursor:pointer;" oninput="updateEx('+ei+',\'exType\',this.value);renderEditor();">'
+          +'<select style="text-align:center;font-family:var(--fm);font-size:11px;background:var(--s3);border:1px solid var(--b1);border-radius:4px;color:'+(isCardio?'var(--ac2)':'var(--t1)')+';padding:4px 2px;cursor:pointer;" onchange="updateExType('+ei+',this.value)">'
           +'<option value="strength"'+(isCardio?'':' selected')+'>근력</option>'
           +'<option value="cardio"'+(isCardio?' selected':'')+'>유산소</option>'
           +'</select>'
@@ -871,7 +871,12 @@ window.removeDay=function(){
 window.updateProgName=function(v){const p=getProg();if(p)p.name=v;};
 window.updateProgDate=function(f,v){const p=getProg();if(p)p[f]=v;};
 window.updateDayLabel=function(v){const p=getProg();if(p)p.days[editingDayIdx].label=v;};
-window.updateEx=function(ei,f,v){const p=getProg();if(p)p.days[editingDayIdx].exercises[ei][f]=v;};
+window.updateEx=function(ei,f,v){const p=getProg();if(!p)return;p.days[editingDayIdx].exercises[ei][f]=v;};
+window.updateExType=function(ei,v){
+  const p=getProg();if(!p)return;
+  p.days[editingDayIdx].exercises[ei].exType=v;
+  renderEditor();
+};
 window.addEx=function(){
   const p=getProg();if(!p)return;
   if(!p.days[editingDayIdx].exercises)p.days[editingDayIdx].exercises=[];
