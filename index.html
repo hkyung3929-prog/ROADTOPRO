@@ -31,9 +31,7 @@ button,input,select,textarea{font-family:inherit;}
 .cover-sub em{color:var(--ac2);font-style:normal;}
 .cover-heartbeat{margin:22px 0 28px;width:clamp(260px,38vw,520px);animation:fadeUp .5s .44s ease both;}
 .heartbeat-svg{width:100%;height:48px;overflow:visible;}
-.hb-line{fill:none;stroke:var(--ac);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:520;stroke-dashoffset:520;animation:hbDraw 2.2s .8s ease-out forwards,hbLoop 2.8s 3s ease-in-out infinite;}
-@keyframes hbDraw{to{stroke-dashoffset:0;}}
-@keyframes hbLoop{0%{stroke-dashoffset:0;opacity:1;}70%{stroke-dashoffset:0;opacity:1;}85%{stroke-dashoffset:-520;opacity:0;}86%{stroke-dashoffset:520;opacity:0;}100%{stroke-dashoffset:0;opacity:1;}}
+.hb-line{fill:none;stroke:var(--ac);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:520;stroke-dashoffset:520;}
 .btn-enter{position:relative;background:none;border:none;cursor:pointer;padding:0;outline:none;animation:fadeUp .5s .58s ease both,heartbeat 1.6s 1.2s ease-in-out infinite;}
 @keyframes heartbeat{0%{transform:scale(1);}10%{transform:scale(1.06);}20%{transform:scale(1);}30%{transform:scale(1.04);}40%{transform:scale(1);}100%{transform:scale(1);}}
 .btn-enter::before,.btn-enter::after{content:'';position:absolute;inset:-4px;border-radius:14px;border:2px solid rgba(255,106,0,.55);animation:ripplePulse 1.6s 1.2s ease-out infinite;pointer-events:none;}
@@ -732,15 +730,20 @@ function renderEditor(){
     editorBody='<div class="rest-day-card"><span class="rest-icon">🌿</span>REST DAY'
       +'<div class="rest-desc">이 날은 휴식일입니다. 운동 기록이 표시되지 않습니다.</div></div>';
   }else if(day){
-    const colT='1fr 80px 90px 32px';
+    const colT='1fr 60px 80px 90px 32px';
     const exRowsHtml=day.exercises&&day.exercises.length
       ?day.exercises.map(function(ex,ei){
+        const isCardio=(ex.exType==='cardio');
         return '<div class="ex-row" style="grid-template-columns:'+colT+'">'
           +'<input value="'+(ex.name||'')+'" placeholder="운동 이름" oninput="updateEx('+ei+',\'name\',this.value)">'
-          +'<input value="'+(ex.sets||'')+'" placeholder="3" type="number" min="1"'
-          +' oninput="updateEx('+ei+',\'sets\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
-          +'<input value="'+(ex.rest||'')+'" placeholder="90" type="number" min="0"'
-          +' oninput="updateEx('+ei+',\'rest\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
+          +'<select style="text-align:center;font-family:var(--fm);font-size:11px;background:var(--s3);border:1px solid var(--b1);border-radius:4px;color:'+(isCardio?'var(--ac2)':'var(--t1)')+';padding:4px 2px;cursor:pointer;" oninput="updateEx('+ei+',\'exType\',this.value);renderEditor();">'
+          +'<option value="strength"'+(isCardio?'':' selected')+'>근력</option>'
+          +'<option value="cardio"'+(isCardio?' selected':'')+'>유산소</option>'
+          +'</select>'
+          +(isCardio
+            ?'<input value="'+(ex.duration||'')+'" placeholder="분" type="number" min="0" oninput="updateEx('+ei+',\'duration\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;" title="시간(분)"><span style="display:flex;align-items:center;font-size:10px;color:var(--t3);font-family:var(--fm);">세트없음</span>'
+            :'<input value="'+(ex.sets||'')+'" placeholder="3" type="number" min="1" oninput="updateEx('+ei+',\'sets\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;"><input value="'+(ex.rest||'')+'" placeholder="90" type="number" min="0" oninput="updateEx('+ei+',\'rest\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
+          )
           +'<button class="btn btn-sm btn-danger" onclick="removeEx('+ei+')" style="padding:3px 7px;">✕</button>'
           +'</div>';
       }).join('')
@@ -751,7 +754,7 @@ function renderEditor(){
       +'<span class="sec-label">운동 목록</span>'
       +'<div style="border:1px solid var(--b1);border-radius:var(--r);overflow:hidden;margin-bottom:10px;">'
       +'<div class="ex-table-head" style="grid-template-columns:'+colT+'">'
-      +'<span>운동 이름</span><span style="text-align:center">세트</span><span style="text-align:center">휴식(초)</span><span></span>'
+      +'<span>운동 이름</span><span style="text-align:center">타입</span><span style="text-align:center">세트/시간</span><span style="text-align:center">휴식(초)</span><span></span>'
       +'</div>'
       +'<div id="ex-rows">'+exRowsHtml+'</div></div>'
       +'<button class="btn btn-ghost btn-sm" onclick="addEx()" style="width:100%;justify-content:center;border-style:dashed;">+ 운동 추가</button>';
@@ -1014,9 +1017,14 @@ window.closeLogPanel=function(){logOpenDay=null;document.getElementById('log-pan
 ══════════════════════════════════ */
 function makeEmptyLog(pd){
   return (pd.exercises||[]).map(function(ex){
+    const isCardio=(ex.exType==='cardio');
+    if(isCardio){
+      return {name:ex.name,exType:'cardio',duration:ex.duration||'',done:false};
+    }
     const sets=parseInt(ex.sets)||3;
     return {
       name:ex.name,
+      exType:'strength',
       rest:ex.rest||'',
       sets:Array.from({length:sets},function(){return {weight:'',reps:'',done:false};})
     };
@@ -1034,41 +1042,65 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
 
   let html='';
   dl.log.forEach(function(ex,ei){
-    const sets=parseInt(pd.exercises[ei]&&pd.exercises[ei].sets)||ex.sets.length||3;
-    const rest=pd.exercises[ei]&&pd.exercises[ei].rest?pd.exercises[ei].rest+'초':'—';
+    const exDef=pd.exercises[ei]||{};
+    const isCardio=(ex.exType==='cardio'||exDef.exType==='cardio');
+    const sets=parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
+    const rest=exDef.rest?exDef.rest+'초':'—';
+    const metaText=isCardio?'유산소 · '+(exDef.duration||ex.duration||'?')+'분':sets+'세트 · 휴식 '+rest;
+
     html+='<div class="log-ex-block">'
-      // 운동 헤더
       +'<div class="log-ex-header">'
       +'<div class="log-ex-header-left">'
       +'<div class="log-ex-title">'+(ex.name||'운동')+'</div>'
-      +'<div class="log-ex-meta">'+sets+'세트 · 휴식 '+rest+'</div>'
+      +'<div class="log-ex-meta">'+metaText+'</div>'
       +'</div>'
       +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+')">'+(ex.done?'✓':'')+'</button>'
-      +'</div>'
-      // 세트별 중량·횟수 테이블
-      +'<div class="log-sets-table">'
-      +'<div class="log-sets-head"><span>SET</span><span>중량(kg)</span><span>횟수</span></div>';
+      +'</div>';
 
-    ex.sets.forEach(function(set,si){
-      html+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
-        +'<div class="log-set-num">'+(si+1)+'</div>'
-        +'<input class="log-field-input" type="number" min="0" step="0.5"'
-        +' value="'+(set.weight||'')+'" placeholder="—"'
-        +' oninput="updateSetField('+dayIdx+','+ei+','+si+',\'weight\',this.value)">'
-        +'<input class="log-field-input" type="number" min="0"'
-        +' value="'+(set.reps||'')+'" placeholder="—"'
-        +' oninput="updateSetField('+dayIdx+','+ei+','+si+',\'reps\',this.value)">'
-        +'</div>';
-    });
-
-    html+='</div></div>'; // log-sets-table, log-ex-block
+    if(isCardio){
+      // 유산소: 실제 시간 입력 하나
+      const tField=isToday
+        ?'updateSetFieldWeek('+dayIdx+','+ei+',0,\'time\',this.value,0)'
+        :'updateSetField('+dayIdx+','+ei+',0,\'time\',this.value)';
+      const curTime=(ex.sets&&ex.sets[0]&&ex.sets[0].time)||'';
+      html+='<div class="log-sets-table">'
+        +'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;">'
+        +'<span style="font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;">실제 시간</span>'
+        +'<input class="log-field-input" type="number" min="0" step="0.5" style="width:80px;"'
+        +' value="'+curTime+'" placeholder="—" oninput="'+tField+';autoCheckCardio('+dayIdx+','+ei+','+(isToday?0:'undefined')+')">'
+        +'<span style="font-family:var(--fm);font-size:11px;color:var(--t3);">분</span>'
+        +'</div></div>';
+    }else{
+      html+='<div class="log-sets-table">'
+        +'<div class="log-sets-head"><span>SET</span><span>중량(kg)</span><span>횟수</span></div>';
+      (ex.sets||[]).forEach(function(set,si){
+        const wField=isToday
+          ?'updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'weight\',this.value,0)'
+          :'updateSetField('+dayIdx+','+ei+','+si+',\'weight\',this.value)';
+        const rField=isToday
+          ?'updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'reps\',this.value,0)'
+          :'updateSetField('+dayIdx+','+ei+','+si+',\'reps\',this.value)';
+        const autoChk='autoCheckSets('+dayIdx+','+ei+','+(isToday?0:'undefined')+')';
+        html+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
+          +'<div class="log-set-num">'+(si+1)+'</div>'
+          +'<input class="log-field-input" type="number" min="0" step="0.5"'
+          +' value="'+(set.weight||'')+'" placeholder="—"'
+          +' oninput="'+wField+';'+autoChk+'">'
+          +'<input class="log-field-input" type="number" min="0"'
+          +' value="'+(set.reps||'')+'" placeholder="—"'
+          +' oninput="'+rField+';'+autoChk+'">'
+          +'</div>';
+      });
+      html+='</div>';
+    }
+    html+='</div>';
   });
 
   html+='<div style="margin-top:16px;"><span class="sec-label">메모</span>'
     +'<textarea class="inp" rows="2" placeholder="오늘의 컨디션, 느낀 점…"'
     +' oninput="updateNotes('+dayIdx+',this.value)">'+(dl.notes||'')+'</textarea></div>'
     +'<div class="log-bottom">'
-    +'<button class="btn btn-primary" onclick="'+saveF+'">💾 저장</button>'
+    +'<button class="btn btn-primary" onclick="'+saveF+'">SAVE</button>'
     +'</div>';
 
   body.innerHTML=html;
@@ -1101,8 +1133,36 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
 window.updateSetField=function(di,ei,si,field,val){
   const wl=getWeekLog();const dl=wl.days[di]||{};
   if(!dl.log||!dl.log[ei])return;
+  if(!dl.log[ei].sets)dl.log[ei].sets=[{weight:'',reps:'',done:false}];
   dl.log[ei].sets[si][field]=val;
   wl.days[di]=dl;setWeekLogLocal(wl);
+};
+// 모든 세트에 중량+횟수가 입력되면 자동 체크
+window.autoCheckSets=function(di,ei,weekOff){
+  const isWeek=(weekOff!==undefined);
+  const wl=isWeek?getWeekLog(weekOff):getWeekLog();
+  const dl=wl.days[di]||{};
+  if(!dl.log||!dl.log[ei]||!dl.log[ei].sets)return;
+  const allFilled=dl.log[ei].sets.every(function(s){return (s.weight!==''&&s.weight!==null&&s.weight!==undefined)&&(s.reps!==''&&s.reps!==null&&s.reps!==undefined);});
+  if(allFilled&&!dl.log[ei].done){
+    dl.log[ei].done=true;
+    wl.days[di]=dl;
+    if(isWeek){setWeekLogLocal(wl,weekOff);renderToday();}
+    else{setWeekLogLocal(wl);openLogPanel(di);}
+  }
+};
+window.autoCheckCardio=function(di,ei,weekOff){
+  const isWeek=(weekOff!==undefined);
+  const wl=isWeek?getWeekLog(weekOff):getWeekLog();
+  const dl=wl.days[di]||{};
+  if(!dl.log||!dl.log[ei])return;
+  const hasTime=dl.log[ei].sets&&dl.log[ei].sets[0]&&dl.log[ei].sets[0].time;
+  if(hasTime&&!dl.log[ei].done){
+    dl.log[ei].done=true;
+    wl.days[di]=dl;
+    if(isWeek){setWeekLogLocal(wl,weekOff);renderToday();}
+    else{setWeekLogLocal(wl);openLogPanel(di);}
+  }
 };
 window.updateNotes=function(di,val){
   const wl=getWeekLog();wl.days[di]=wl.days[di]||{};wl.days[di].notes=val;setWeekLogLocal(wl);
@@ -1231,37 +1291,55 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
 
   let html='';
   dl.log.forEach(function(ex,ei){
-    const sets=parseInt(pd.exercises[ei]&&pd.exercises[ei].sets)||ex.sets.length||3;
-    const rest=pd.exercises[ei]&&pd.exercises[ei].rest?pd.exercises[ei].rest+'초':'—';
+    const exDef=pd.exercises[ei]||{};
+    const isCardio=(ex.exType==='cardio'||exDef.exType==='cardio');
+    const sets=parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
+    const rest=exDef.rest?exDef.rest+'초':'—';
+    const metaText=isCardio?'유산소 · '+(exDef.duration||ex.duration||'?')+'분':sets+'세트 · 휴식 '+rest;
+
     html+='<div class="log-ex-block">'
       +'<div class="log-ex-header">'
       +'<div class="log-ex-header-left">'
       +'<div class="log-ex-title">'+(ex.name||'운동')+'</div>'
-      +'<div class="log-ex-meta">'+sets+'세트 · 휴식 '+rest+'</div>'
+      +'<div class="log-ex-meta">'+metaText+'</div>'
       +'</div>'
       +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+','+weekOff+')">'+(ex.done?'✓':'')+'</button>'
-      +'</div>'
-      +'<div class="log-sets-table">'
-      +'<div class="log-sets-head"><span>SET</span><span>중량(kg)</span><span>횟수</span></div>';
-    ex.sets.forEach(function(set,si){
-      html+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
-        +'<div class="log-set-num">'+(si+1)+'</div>'
-        +'<input class="log-field-input" type="number" min="0" step="0.5"'
-        +' value="'+(set.weight||'')+'" placeholder="—"'
-        +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'weight\',this.value,'+weekOff+')">'
-        +'<input class="log-field-input" type="number" min="0"'
-        +' value="'+(set.reps||'')+'" placeholder="—"'
-        +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'reps\',this.value,'+weekOff+')">'
-        +'</div>';
-    });
-    html+='</div></div>';
+      +'</div>';
+
+    if(isCardio){
+      const curTime=(ex.sets&&ex.sets[0]&&ex.sets[0].time)||'';
+      html+='<div class="log-sets-table">'
+        +'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;">'
+        +'<span style="font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;">실제 시간</span>'
+        +'<input class="log-field-input" type="number" min="0" step="0.5" style="width:80px;"'
+        +' value="'+curTime+'" placeholder="—"'
+        +' oninput="updateSetFieldWeek('+dayIdx+','+ei+',0,\'time\',this.value,'+weekOff+');autoCheckCardio('+dayIdx+','+ei+','+weekOff+')">'
+        +'<span style="font-family:var(--fm);font-size:11px;color:var(--t3);">분</span>'
+        +'</div></div>';
+    }else{
+      html+='<div class="log-sets-table">'
+        +'<div class="log-sets-head"><span>SET</span><span>중량(kg)</span><span>횟수</span></div>';
+      (ex.sets||[]).forEach(function(set,si){
+        html+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
+          +'<div class="log-set-num">'+(si+1)+'</div>'
+          +'<input class="log-field-input" type="number" min="0" step="0.5"'
+          +' value="'+(set.weight||'')+'" placeholder="—"'
+          +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'weight\',this.value,'+weekOff+');autoCheckSets('+dayIdx+','+ei+','+weekOff+')">'
+          +'<input class="log-field-input" type="number" min="0"'
+          +' value="'+(set.reps||'')+'" placeholder="—"'
+          +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'reps\',this.value,'+weekOff+');autoCheckSets('+dayIdx+','+ei+','+weekOff+')">'
+          +'</div>';
+      });
+      html+='</div>';
+    }
+    html+='</div>';
   });
 
   html+='<div style="margin-top:16px;"><span class="sec-label">메모</span>'
     +'<textarea class="inp" rows="2" placeholder="오늘의 컨디션, 느낀 점…"'
     +' oninput="updateNotesWeek('+dayIdx+',this.value,'+weekOff+')">'+(dl.notes||'')+'</textarea></div>'
     +'<div class="log-bottom">'
-    +'<button class="btn btn-primary" onclick="'+saveF+'">💾 저장</button>'
+    +'<button class="btn btn-primary" onclick="'+saveF+'">SAVE</button>'
     +'</div>';
 
   body.innerHTML=html;
@@ -1270,6 +1348,8 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
 window.updateSetFieldWeek=function(di,ei,si,field,val,weekOff){
   const wl=getWeekLog(weekOff);const dl=wl.days[di]||{};
   if(!dl.log||!dl.log[ei])return;
+  if(!dl.log[ei].sets)dl.log[ei].sets=[{}];
+  if(!dl.log[ei].sets[si])dl.log[ei].sets[si]={};
   dl.log[ei].sets[si][field]=val;
   wl.days[di]=dl;setWeekLogLocal(wl,weekOff);
 };
@@ -1304,6 +1384,54 @@ window.saveTodayLogWeek=async function(di,weekOff){
 /* ── 초기 캐시 로드 ── */
 programs=lsLoad('rtp_programs_tiger')||[];
 logs=lsLoad('rtp_logs_tiger')||{};
+
+// 심장박동은 CSS animation으로 처리
+// 심장박동 JS 루프: 왼쪽부터 그리고 → 완성 후 싹 지우고 → 반복
+(function(){
+  const line = document.querySelector('.hb-line');
+  if(!line) return;
+  const TOTAL = 520;
+  const DRAW_MS = 2200;   // 그리는 시간
+  const HOLD_MS = 300;    // 완성 후 잠깐 유지
+  const PAUSE_MS = 400;   // 지운 후 쉬는 시간
+
+  function easeOut(t){ return 1 - Math.pow(1-t, 3); }
+
+  function runLoop(){
+    // 1) 지운 상태에서 시작
+    line.style.strokeDashoffset = TOTAL;
+    line.style.opacity = '1';
+
+    // 2) 왼쪽부터 그리기
+    const start = performance.now();
+    function draw(now){
+      const elapsed = now - start;
+      const t = Math.min(elapsed / DRAW_MS, 1);
+      const offset = TOTAL * (1 - easeOut(t));
+      line.style.strokeDashoffset = offset;
+      if(t < 1){ requestAnimationFrame(draw); }
+      else{
+        // 3) 완성 — 잠깐 유지
+        setTimeout(function(){
+          // 4) 순간 지우기
+          line.style.opacity = '0';
+          setTimeout(function(){
+            line.style.strokeDashoffset = TOTAL;
+            // 5) 쉬고 다시 반복
+            setTimeout(function(){
+              line.style.opacity = '1';
+              runLoop();
+            }, PAUSE_MS);
+          }, 50);
+        }, HOLD_MS);
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+
+  // 첫 시작은 약간 딜레이
+  setTimeout(runLoop, 800);
+})();
 
 window.onTodayDateChange=function(val){
   todaySelectedDate=val||null;
