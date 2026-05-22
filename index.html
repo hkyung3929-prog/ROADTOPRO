@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>RTP — Road to Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;0,900;1,700;1,900&family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -323,6 +323,12 @@ select.inp{cursor:pointer;}
   /* 프로그램 편집기 헤더 */
   .prog-bar-wrap{padding:10px 14px;}
   .prog-bar-pct{font-size:11px;}
+
+  /* iOS 자동 확대 방지: 모든 입력 요소 font-size 16px 강제 */
+  input, select, textarea{font-size:16px!important;}
+  .log-field-input{font-size:16px!important;}
+  .inp{font-size:16px!important;}
+  .inp-sm{font-size:16px!important;}
 }
 
 /* ── COVER CHOICE ── */
@@ -566,10 +572,10 @@ document.dispatchEvent(new Event('firebase-ready'));
   <!-- TODAY -->
   <div class="view on" id="view-today">
   <div class="today-wrap">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;">
-      <div style="font-family:var(--fh);font-size:20px;font-weight:900;font-style:italic;letter-spacing:.06em;color:var(--t1);">⚡ 오늘의 기록</div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;">날짜 선택</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:nowrap;">
+      <div style="font-family:var(--fh);font-size:18px;font-weight:900;font-style:italic;letter-spacing:.06em;color:var(--t1);white-space:nowrap;flex-shrink:0;">⚡ 오늘의 기록</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <span style="font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;">날짜</span>
         <input type="date" id="today-date-selector" class="inp inp-sm inp-mono" style="width:138px;"
           onchange="onTodayDateChange(this.value)">
         <button class="btn btn-sm btn-ghost" onclick="todaySelectedDate=null;renderToday();" style="font-size:11px;">오늘</button>
