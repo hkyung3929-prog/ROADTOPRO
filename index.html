@@ -875,19 +875,40 @@ function renderEditor(){
         )
         +'<button class="btn btn-sm btn-danger" onclick="removeEx('+ei+')" style="padding:3px 7px;">✕</button>'
         +'</div>'
-        // 대체 운동 입력 (여러 개)
+        // 대체 운동 입력 (여러 개, 세트/휴식 포함)
         +(function(){
           const alts=Array.isArray(ex.alts)&&ex.alts.length?ex.alts:[];
           let altHtml='';
           alts.forEach(function(a,ai){
-            altHtml+='<div class="alt-ex-row">'
-              +'<span class="alt-ex-label">대체'+(alts.length>1?' '+(ai+1):'')+'</span>'
-              +'<input class="alt-ex-input" value="'+(a||'')+'" placeholder="대체 운동 이름" oninput="updateAlt('+ei+','+ai+',this.value)">'
-              +'<button onclick="removeAlt('+ei+','+ai+')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:0 4px;flex-shrink:0;" title="삭제">✕</button>'
+            const aObj=(typeof a==='object'&&a!==null)?a:{name:a||''};
+            const aIsCardio=(aObj.exType==='cardio');
+            const aRestSec=parseInt(aObj.rest)||0;
+            const aRestMin=Math.floor(aRestSec/60);
+            const aRestSecRem=aRestSec%60;
+            altHtml+='<div style="background:rgba(255,179,71,.04);border-bottom:1px solid var(--b1);padding:8px 12px;">'
+              // 대체 운동 이름 행
+              +'<div style="display:grid;grid-template-columns:1fr 80px 90px 32px;gap:8px;align-items:center;margin-bottom:6px;">'
+              +'<div style="display:flex;align-items:center;gap:6px;">'
+              +'<span style="font-family:var(--fm);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ac2);white-space:nowrap;">대체'+(alts.length>1?' '+(ai+1):'')+'</span>'
+              +'<input style="flex:1;background:transparent;border:none;border-bottom:1px solid var(--b2);color:var(--t1);font-size:13px;font-family:var(--fb);outline:none;padding:2px 4px;" value="'+(aObj.name||'')+'" placeholder="대체 운동 이름" oninput="updateAltField('+ei+','+ai+',\'name\',this.value)">'
+              +'</div>'
+              +(aIsCardio
+                ?'<input value="'+(aObj.duration||'')+'" placeholder="분" type="number" min="0" inputmode="numeric" oninput="updateAltField('+ei+','+ai+',\'duration\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;background:transparent;border:none;border-bottom:1px solid var(--b2);color:var(--t1);outline:none;">'
+                 +'<span style="display:flex;align-items:center;font-size:10px;color:var(--ac2);font-family:var(--fm);">유산소</span>'
+                :'<input value="'+(aObj.sets||'')+'" placeholder="3" type="number" min="1" inputmode="numeric" oninput="updateAltField('+ei+','+ai+',\'sets\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;background:transparent;border:none;border-bottom:1px solid var(--b2);color:var(--t1);outline:none;">'
+                 +'<div class="rest-minisec">'
+                   +'<input type="number" min="0" max="59" inputmode="numeric" value="'+aRestMin+'" placeholder="0" oninput="updateAltRestMinSec('+ei+','+ai+',this.value,null)">'
+                   +'<span>분</span>'
+                   +'<input type="number" min="0" max="59" inputmode="numeric" value="'+aRestSecRem+'" placeholder="0" oninput="updateAltRestMinSec('+ei+','+ai+',null,this.value)">'
+                   +'<span>초</span>'
+                   +'</div>'
+              )
+              +'<button onclick="removeAlt('+ei+','+ai+')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:0;justify-self:center;" title="삭제">✕</button>'
+              +'</div>'
               +'</div>';
           });
-          altHtml+='<div class="alt-ex-row" style="border-top:'+(alts.length?'1px dashed var(--b1)':'none')+';">'
-            +'<button onclick="addAlt('+ei+')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:11px;font-family:var(--fm);letter-spacing:.1em;padding:2px 4px;display:flex;align-items:center;gap:4px;">+ 대체 운동 추가</button>'
+          altHtml+='<div style="padding:6px 12px;border-bottom:1px solid var(--b1);">'
+            +'<button onclick="addAlt('+ei+')" style="background:none;border:1px dashed var(--b2);border-radius:4px;color:var(--t3);cursor:pointer;font-size:11px;font-family:var(--fm);letter-spacing:.08em;padding:4px 10px;width:100%;text-align:center;">+ 대체 운동 추가</button>'
             +'</div>';
           return altHtml;
         })();
@@ -1060,8 +1081,8 @@ window.updateExType=function(ei,v){
 window.addAlt=function(ei){
   const p=getProg();if(!p)return;
   const ex=p.days[editingDayIdx].exercises[ei];
-  if(!Array.isArray(ex.alts))ex.alts=ex.alt?[ex.alt]:[];
-  ex.alts.push('');
+  if(!Array.isArray(ex.alts))ex.alts=ex.alt?[{name:ex.alt}]:[];
+  ex.alts.push({name:'',sets:'',rest:'',exType:'strength'});
   delete ex.alt;
   renderEditor();
 };
@@ -1076,7 +1097,33 @@ window.updateAlt=function(ei,ai,v){
   const p=getProg();if(!p)return;
   const ex=p.days[editingDayIdx].exercises[ei];
   if(!Array.isArray(ex.alts))ex.alts=[];
-  ex.alts[ai]=v;
+  if(typeof ex.alts[ai]==='string') ex.alts[ai]={name:v};
+  else ex.alts[ai].name=v;
+};
+window.updateAltField=function(ei,ai,field,v){
+  const p=getProg();if(!p)return;
+  const ex=p.days[editingDayIdx].exercises[ei];
+  if(!Array.isArray(ex.alts)||!ex.alts[ai])return;
+  if(typeof ex.alts[ai]==='string') ex.alts[ai]={name:ex.alts[ai]};
+  ex.alts[ai][field]=v;
+  if(field==='name'){
+    const wasCardio=(ex.alts[ai].exType==='cardio');
+    const isCardio=v.includes('유산소');
+    ex.alts[ai].exType=isCardio?'cardio':'strength';
+    if(wasCardio!==isCardio) renderEditor();
+  }
+};
+window.updateAltRestMinSec=function(ei,ai,minVal,secVal){
+  const p=getProg();if(!p)return;
+  const ex=p.days[editingDayIdx].exercises[ei];
+  if(!Array.isArray(ex.alts)||!ex.alts[ai])return;
+  const aObj=ex.alts[ai];
+  const cur=parseInt(aObj.rest)||0;
+  const curMin=Math.floor(cur/60);
+  const curSec=cur%60;
+  const m=(minVal!==null&&minVal!=='')?parseInt(minVal)||0:curMin;
+  const s=(secVal!==null&&secVal!=='')?parseInt(secVal)||0:curSec;
+  aObj.rest=String(m*60+s);
 };
 window.addEx=function(){
   const p=getProg();if(!p)return;
@@ -1268,11 +1315,19 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
     const sets=parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
     const restTxt=fmtRest(exDef.rest);
     const metaText=isCardio?'유산소 · '+(exDef.duration||ex.duration||'?')+'분':sets+'세트 · 휴식 '+restTxt;
-    const alts=Array.isArray(exDef.alts)&&exDef.alts.length?exDef.alts.filter(a=>a&&a.trim()):(exDef.alt?[exDef.alt]:[]);
+    const alts=(Array.isArray(exDef.alts)&&exDef.alts.length
+      ?exDef.alts.map(a=>typeof a==='object'&&a?a:{name:a||''}).filter(a=>a.name&&a.name.trim())
+      :(exDef.alt?[{name:exDef.alt}]:[]));
     const hasAlt=alts.length>0;
     const altIdx=(typeof ex.altIdx==='number'&&ex.altIdx>=0&&ex.altIdx<alts.length)?ex.altIdx:-1;
     const usingAlt=altIdx>=0;
-    const displayName=usingAlt?alts[altIdx]:(ex.name||exDef.name||'운동');
+    const activeEx=usingAlt?alts[altIdx]:exDef;  // 대체 선택시 해당 대체 운동 정의 사용
+    const displayName=usingAlt?alts[altIdx].name:(ex.name||exDef.name||'운동');
+    // 대체 선택시 세트/휴식/유산소 정보를 대체 운동 기준으로
+    const activeIsCardio=usingAlt?(activeEx.exType==='cardio'):isCardio;
+    const activeSets=usingAlt?parseInt(activeEx.sets)||3:parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
+    const activeRestTxt=usingAlt?fmtRest(activeEx.rest):restTxt;
+    const activeMetaText=activeIsCardio?'유산소 · '+(activeEx.duration||'?')+'분':activeSets+'세트 · 휴식 '+activeRestTxt;
     // 대체 버튼: 여러개면 순환, 하나면 토글
     const altBtnLabel=usingAlt?'원래':('대체'+(alts.length>1?' ▾':''));
     const altBtnClick=usingAlt
@@ -1285,7 +1340,7 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
       +'<div class="log-ex-title">'+displayName
       +(usingAlt?'<span style="font-size:10px;color:var(--ac2);font-family:var(--fm);margin-left:6px;letter-spacing:.06em;">대체중</span>':'')
       +'</div>'
-      +'<div class="log-ex-meta">'+metaText+'</div>'
+      +'<div class="log-ex-meta">'+activeMetaText+'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;">'
       +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="'+altBtnClick+'">'+altBtnLabel+'</button>':'')
@@ -1387,8 +1442,35 @@ window.selectAltEx=function(di,ei,idx,weekOff){
   const dl=wl.days[di]||{};
   if(!dl.log||!dl.log[ei])return;
   dl.log[ei].altIdx=idx;
+
+  // 대체 운동의 세트 수에 맞게 로그 재초기화
+  if(idx>=0){
+    const prog=programs.find(p=>p.id==(wl.progId||''));
+    if(prog){
+      const dayExs=(isWeek
+        ?(function(){const dow=(new Date((window._todaySelectedDate||new Date().toISOString().slice(0,10))+'T00:00:00').getDay()+6)%7;return dow<prog.days.length?prog.days[dow].exercises||[]:[];})()
+        :(logOpenDay!==null&&logOpenDay<prog.days.length?prog.days[logOpenDay].exercises||[]:[])
+      );
+      const exDef=dayExs[ei]||{};
+      const alts=(Array.isArray(exDef.alts)?exDef.alts:[]).map(a=>typeof a==='object'&&a?a:{name:a||''});
+      const altDef=alts[idx];
+      if(altDef){
+        const isCardio=(altDef.exType==='cardio');
+        if(isCardio){
+          dl.log[ei].sets=[{}];
+        }else{
+          const numSets=parseInt(altDef.sets)||3;
+          // 기존 세트 데이터 유지하되 개수 맞춤
+          const cur=dl.log[ei].sets||[];
+          dl.log[ei].sets=Array.from({length:numSets},(_,si)=>cur[si]||{weight:'',reps:'',done:false});
+        }
+      }
+    }
+  }else{
+    // 원래 운동으로 복귀 시 원래 세트 수로 복구는 하지 않음 (기존 데이터 유지)
+  }
+
   wl.days[di]=dl;
-  // 팝업 닫기
   const menu=document.getElementById('alt-menu-popup');
   if(menu)menu.remove();
   if(isWeek){setWeekLogLocal(wl,weekOff);renderToday();}
@@ -1613,11 +1695,19 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
     const sets=parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
     const restTxt=fmtRest(exDef.rest);
     const metaText=isCardio?'유산소 · '+(exDef.duration||ex.duration||'?')+'분':sets+'세트 · 휴식 '+restTxt;
-    const alts=Array.isArray(exDef.alts)&&exDef.alts.length?exDef.alts.filter(a=>a&&a.trim()):(exDef.alt?[exDef.alt]:[]);
+    const alts=(Array.isArray(exDef.alts)&&exDef.alts.length
+      ?exDef.alts.map(a=>typeof a==='object'&&a?a:{name:a||''}).filter(a=>a.name&&a.name.trim())
+      :(exDef.alt?[{name:exDef.alt}]:[]));
     const hasAlt=alts.length>0;
     const altIdx=(typeof ex.altIdx==='number'&&ex.altIdx>=0&&ex.altIdx<alts.length)?ex.altIdx:-1;
     const usingAlt=altIdx>=0;
-    const displayName=usingAlt?alts[altIdx]:(ex.name||exDef.name||'운동');
+    const activeEx=usingAlt?alts[altIdx]:exDef;  // 대체 선택시 해당 대체 운동 정의 사용
+    const displayName=usingAlt?alts[altIdx].name:(ex.name||exDef.name||'운동');
+    // 대체 선택시 세트/휴식/유산소 정보를 대체 운동 기준으로
+    const activeIsCardio=usingAlt?(activeEx.exType==='cardio'):isCardio;
+    const activeSets=usingAlt?parseInt(activeEx.sets)||3:parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
+    const activeRestTxt=usingAlt?fmtRest(activeEx.rest):restTxt;
+    const activeMetaText=activeIsCardio?'유산소 · '+(activeEx.duration||'?')+'분':activeSets+'세트 · 휴식 '+activeRestTxt;
     const altBtnLabel=usingAlt?'원래':('대체'+(alts.length>1?' ▾':''));
     const altBtnClick=usingAlt
       ?'selectAltEx('+dayIdx+','+ei+',-1,'+weekOff+')'
@@ -1629,7 +1719,7 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       +'<div class="log-ex-title">'+displayName
       +(usingAlt?'<span style="font-size:10px;color:var(--ac2);font-family:var(--fm);margin-left:6px;letter-spacing:.06em;">대체중</span>':'')
       +'</div>'
-      +'<div class="log-ex-meta">'+metaText+'</div>'
+      +'<div class="log-ex-meta">'+activeMetaText+'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;">'
       +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="'+altBtnClick+'">'+altBtnLabel+'</button>':'')
