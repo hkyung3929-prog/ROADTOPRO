@@ -127,6 +127,8 @@ select.inp{cursor:pointer;}
 .day-tab{padding:6px 16px;border-radius:3px;border:1px solid var(--b1);background:transparent;color:var(--t2);font-family:var(--fh);font-size:13px;font-weight:700;font-style:italic;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .16s;}
 .day-tab:hover{border-color:var(--b2);color:var(--t1);}
 .day-tab.on{border-color:var(--ac);color:var(--ac);background:rgba(255,106,0,.08);}
+.day-tab[draggable="true"]:hover{box-shadow:0 2px 8px rgba(0,0,0,.3);}
+.day-tab.drag-over{outline:2px solid var(--ac);outline-offset:1px;}
 .day-tab.rest-tab{border-color:var(--b2);color:var(--t3);}
 .day-tab.rest-tab:hover{border-color:var(--b3);color:var(--t2);}
 .day-tab.rest-tab.on{border-color:var(--b3);color:var(--t2);background:rgba(50,50,63,.3);}
@@ -710,21 +712,15 @@ function getProg(){return programs.find(function(p){return p.id===editingProgId;
 /* 에디터 렌더: 운동명 + 세트 + 휴식시간 */
 function renderEditor(){
   const p=getProg();if(!p){renderEditorEmpty();return;}
-  const dayTabs=p.days.map(function(d,i){
-    const isRest=(d.type==='rest');
-    const label=isRest?'🌿 REST '+(i+1):('DAY '+(i+1)+(d.label&&d.label!=='Day '+(i+1)?' · '+d.label:''));
-    return '<button class="day-tab'+(isRest?' rest-tab':'')+(editingDayIdx===i?' on':'')+'" onclick="switchDay('+i+')">'
-      +label+'</button>';
-  }).join('');
   const day=p.days[editingDayIdx];
-  const isRestDay=(day.type==='rest');
+  const isRestDay=(day&&day.type==='rest');
 
   // DAY 탭 하단에 추가/삭제 버튼 표시
   const canAddDay=(p.days.length<7);
   const canRemoveDay=(p.days.length>1);
   const dayMgmtHtml='<div style="display:flex;gap:6px;margin-bottom:18px;align-items:center;flex-wrap:wrap;">'
     +'<span class="sec-label" style="margin-bottom:0;flex-shrink:0;">루틴</span>'
-    +'<div class="day-tabs" style="margin-bottom:0;flex:1;">'+dayTabs+'</div>'
+    +'<div class="day-tabs" id="day-tabs-drag" style="margin-bottom:0;flex:1;display:flex;gap:5px;flex-wrap:wrap;"></div>'
     +(canAddDay?'<button class="btn btn-sm btn-ghost" onclick="addDay()" style="flex-shrink:0;white-space:nowrap;">+ DAY 추가</button>':'')
     +(canAddDay?'<button class="btn btn-sm btn-ghost" onclick="addRestDay()" style="flex-shrink:0;white-space:nowrap;border-color:var(--b3);color:var(--t3);">🌿 휴식 추가</button>':'')
     +(canRemoveDay?'<button class="btn btn-sm btn-danger" onclick="removeDay()" style="flex-shrink:0;white-space:nowrap;">삭제</button>':'')
@@ -735,7 +731,7 @@ function renderEditor(){
   if(isRestDay){
     editorBody='<div class="rest-day-card"><span class="rest-icon">🌿</span>REST DAY'
       +'<div class="rest-desc">이 날은 휴식일입니다. 운동 기록이 표시되지 않습니다.</div></div>';
-  }else{
+  }else if(day){
     const colT='1fr 80px 90px 32px';
     const exRowsHtml=day.exercises&&day.exercises.length
       ?day.exercises.map(function(ex,ei){
@@ -779,6 +775,67 @@ function renderEditor(){
     +dayMgmtHtml
     +editorBody
     +'</div></div>';
+
+  // 드래그 탭 빌드
+  buildDayTabs();
+}
+
+/* ── 드래그앤드롭 탭 ── */
+function buildDayTabs(){
+  const p=getProg();if(!p)return;
+  const container=document.getElementById('day-tabs-drag');if(!container)return;
+  container.innerHTML='';
+
+  p.days.forEach(function(d,i){
+    const isRest=(d.type==='rest');
+    const workoutNum=!isRest?p.days.slice(0,i+1).filter(function(x){return x.type!=='rest';}).length:0;
+    const label=isRest?'🌿 REST':('DAY '+workoutNum+(d.label&&d.label!==('Day '+workoutNum)?' · '+d.label:''));
+    const btn=document.createElement('button');
+    btn.className='day-tab'+(isRest?' rest-tab':'')+(editingDayIdx===i?' on':'');
+    btn.textContent=label;
+    btn.dataset.idx=i;
+    btn.draggable=true;
+    btn.style.cursor='grab';
+    btn.addEventListener('click',function(){window.switchDay(i);});
+    btn.addEventListener('dragstart',onTabDragStart);
+    btn.addEventListener('dragover',onTabDragOver);
+    btn.addEventListener('drop',onTabDrop);
+    btn.addEventListener('dragend',onTabDragEnd);
+    container.appendChild(btn);
+  });
+}
+
+let dragSrcIdx=null;
+function onTabDragStart(e){
+  dragSrcIdx=parseInt(e.currentTarget.dataset.idx);
+  e.currentTarget.style.opacity='0.45';
+  e.dataTransfer.effectAllowed='move';
+}
+function onTabDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  const over=e.currentTarget;
+  document.querySelectorAll('#day-tabs-drag .day-tab').forEach(function(b){b.style.outline='';});
+  over.style.outline='2px solid var(--ac)';
+}
+function onTabDrop(e){
+  e.preventDefault();
+  const targetIdx=parseInt(e.currentTarget.dataset.idx);
+  if(dragSrcIdx===null||dragSrcIdx===targetIdx)return;
+  const p=getProg();if(!p)return;
+  const moved=p.days.splice(dragSrcIdx,1)[0];
+  p.days.splice(targetIdx,0,moved);
+  // 선택 인덱스 추적
+  if(editingDayIdx===dragSrcIdx){editingDayIdx=targetIdx;}
+  else if(dragSrcIdx<editingDayIdx&&targetIdx>=editingDayIdx){editingDayIdx--;}
+  else if(dragSrcIdx>editingDayIdx&&targetIdx<=editingDayIdx){editingDayIdx++;}
+  dragSrcIdx=null;
+  renderEditor();
+}
+function onTabDragEnd(e){
+  e.currentTarget.style.opacity='';
+  document.querySelectorAll('#day-tabs-drag .day-tab').forEach(function(b){b.style.outline='';});
+  dragSrcIdx=null;
 }
 
 window.switchDay=function(i){editingDayIdx=i;renderEditor();};
