@@ -166,6 +166,11 @@ select.inp{cursor:pointer;}
 .ex-table-head{display:grid;gap:8px;padding:6px 12px;font-family:var(--fm);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--t2);border-bottom:1px solid var(--b1);}
 .ex-row{display:grid;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(37,37,48,.7);align-items:center;transition:background .14s;}
 .ex-row:hover{background:rgba(255,106,0,.025);}
+.ex-drag-handle{display:flex;align-items:center;justify-content:center;cursor:grab;color:var(--t3);font-size:16px;letter-spacing:-1px;user-select:none;touch-action:none;transition:color .15s;}
+.ex-drag-handle:hover{color:var(--ac);}
+.ex-row.ex-drag-over{outline:2px solid var(--ac);outline-offset:-1px;background:rgba(255,106,0,.06);}
+.ex-sec-toggle{border-color:transparent!important;background:transparent!important;opacity:.5;transition:opacity .15s;}
+.ex-sec-toggle:hover{opacity:1;}
 .ex-row input{background:transparent;border:none;outline:none;color:var(--t1);font-size:13px;width:100%;}
 .ex-row input::placeholder{color:var(--t2);}
 .ex-row input:focus{color:var(--ac);}
@@ -860,7 +865,11 @@ function renderEditor(){
       const restSec=parseInt(ex.rest)||0;
       const restMin=Math.floor(restSec/60);
       const restSecRem=restSec%60;
-      return '<div class="ex-row" style="grid-template-columns:1fr 72px minmax(110px,auto) 32px">'
+      const isWarmup=(ex.section==='warmup');
+      const secTitle=isWarmup?'본운동으로 이동':'선행운동으로 이동';
+      const secIcon=isWarmup?'🔶':'🔵';
+      return '<div class="ex-row" data-ei="'+ei+'" style="grid-template-columns:28px 1fr 72px minmax(110px,auto) 28px 28px">'
+        +'<div class="ex-drag-handle" data-ei="'+ei+'" title="드래그하여 순서 변경">≡</div>'
         +'<input value="'+(ex.name||'')+'" placeholder="운동 이름" oninput="updateExName('+ei+',this.value)">'
         +(isCardio
           ?'<input value="'+(ex.duration||'')+'" placeholder="분" type="number" min="0" inputmode="numeric" oninput="updateEx('+ei+',\'duration\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
@@ -873,6 +882,7 @@ function renderEditor(){
              +'<span>초</span>'
              +'</div>'
         )
+        +'<button class="btn btn-sm btn-danger ex-sec-toggle" onclick="toggleExSection('+ei+')" title="'+secTitle+'" style="padding:3px 5px;font-size:11px;">'+secIcon+'</button>'
         +'<button class="btn btn-sm btn-danger" onclick="removeEx('+ei+')" style="padding:3px 7px;">✕</button>'
         +'</div>'
         // 대체 운동 입력 (여러 개, 세트/휴식 포함)
@@ -933,8 +943,8 @@ function renderEditor(){
     editorBody='<div style="margin-bottom:16px;"><span class="sec-label">Day '+(editingDayIdx+1)+' 이름</span>'
       +'<input class="inp inp-sm" value="'+(day.label||'')+'" placeholder="예: 가슴&삼두, 하체…" oninput="updateDayLabel(this.value)"></div>'
       +'<div style="border:1px solid var(--b1);border-radius:var(--r);overflow:hidden;margin-bottom:10px;">'
-      +'<div class="ex-table-head" style="grid-template-columns:1fr 72px minmax(110px,auto) 32px">'
-      +'<span>운동 이름</span><span style="text-align:center">세트/시간</span><span style="text-align:center">휴식</span><span></span>'
+      +'<div class="ex-table-head" style="grid-template-columns:28px 1fr 72px minmax(110px,auto) 28px 28px">'
+      +'<span></span><span>운동 이름</span><span style="text-align:center">세트/시간</span><span style="text-align:center">휴식</span><span></span><span></span>'
       +'</div>'
       +warmupHtml+mainHtml
       +'</div>';
@@ -1235,6 +1245,131 @@ window.addExSection=function(section){
   renderEditor();
 };
 window.removeEx=function(ei){const p=getProg();if(!p)return;p.days[editingDayIdx].exercises.splice(ei,1);renderEditor();};
+
+window.toggleExSection=function(ei){
+  const p=getProg();if(!p)return;
+  const ex=p.days[editingDayIdx].exercises[ei];
+  ex.section=(ex.section==='warmup')?'main':'warmup';
+  renderEditor();
+  toast(ex.section==='warmup'?'🔵 선행운동으로 이동':'🔶 본운동으로 이동');
+};
+
+/* ── 운동 행 드래그 (마우스+터치) ── */
+(function(){
+  let srcEi=null,clone=null,offX=0,offY=0,moved=false;
+
+  function getContainer(){return document.querySelector('#prog-editor .card-body');}
+
+  function getRowByEi(ei){return document.querySelector('.ex-row[data-ei="'+ei+'"]');}
+
+  function allRows(){return Array.from(document.querySelectorAll('#prog-editor .ex-row'));}
+
+  function clearOver(){allRows().forEach(function(r){r.classList.remove('ex-drag-over');});}
+
+  function rowUnder(x,y){
+    if(clone)clone.style.display='none';
+    const el=document.elementFromPoint(x,y);
+    if(clone)clone.style.display='';
+    if(!el)return null;
+    return el.closest('.ex-row');
+  }
+
+  function doReorder(targetEi){
+    if(srcEi===null||targetEi===null||srcEi===targetEi)return;
+    const p=getProg();if(!p)return;
+    const exs=p.days[editingDayIdx].exercises;
+    const moved2=exs.splice(srcEi,1)[0];
+    exs.splice(targetEi,0,moved2);
+    renderEditor();
+  }
+
+  /* 마우스 */
+  document.addEventListener('mousedown',function(e){
+    const handle=e.target.closest('.ex-drag-handle');
+    if(!handle)return;
+    e.preventDefault();
+    srcEi=parseInt(handle.dataset.ei);moved=false;
+    const row=getRowByEi(srcEi);if(!row)return;
+    const rect=row.getBoundingClientRect();
+    offX=e.clientX-rect.left;offY=e.clientY-rect.top;
+  });
+  document.addEventListener('mousemove',function(e){
+    if(srcEi===null)return;
+    if(!moved){
+      moved=true;
+      const row=getRowByEi(srcEi);if(!row)return;
+      clone=row.cloneNode(true);
+      const rect=row.getBoundingClientRect();
+      clone.style.cssText='position:fixed;z-index:9999;opacity:.8;pointer-events:none;'
+        +'width:'+rect.width+'px;background:var(--s3);border:1px solid var(--ac);border-radius:4px;'
+        +'display:grid;gap:8px;padding:9px 12px;align-items:center;'
+        +'grid-template-columns:28px 1fr 72px minmax(110px,auto) 28px 28px;';
+      document.body.appendChild(clone);
+      row.style.opacity='.3';
+    }
+    clone.style.left=(e.clientX-offX)+'px';
+    clone.style.top=(e.clientY-offY)+'px';
+    clearOver();
+    const target=rowUnder(e.clientX,e.clientY);
+    if(target&&parseInt(target.dataset.ei)!==srcEi)target.classList.add('ex-drag-over');
+  });
+  document.addEventListener('mouseup',function(e){
+    if(srcEi===null)return;
+    if(clone){clone.remove();clone=null;}
+    clearOver();
+    if(moved){
+      const target=rowUnder(e.clientX,e.clientY);
+      if(target)doReorder(parseInt(target.dataset.ei));
+    }
+    const row=getRowByEi(srcEi);if(row)row.style.opacity='';
+    srcEi=null;moved=false;
+  });
+
+  /* 터치 */
+  document.addEventListener('touchstart',function(e){
+    const handle=e.target.closest('.ex-drag-handle');
+    if(!handle)return;
+    srcEi=parseInt(handle.dataset.ei);moved=false;
+    const touch=e.touches[0];
+    const row=getRowByEi(srcEi);if(!row)return;
+    const rect=row.getBoundingClientRect();
+    offX=touch.clientX-rect.left;offY=touch.clientY-rect.top;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(srcEi===null)return;
+    e.preventDefault();
+    const touch=e.touches[0];
+    if(!moved){
+      moved=true;
+      const row=getRowByEi(srcEi);if(!row)return;
+      clone=row.cloneNode(true);
+      const rect=row.getBoundingClientRect();
+      clone.style.cssText='position:fixed;z-index:9999;opacity:.8;pointer-events:none;'
+        +'width:'+rect.width+'px;background:var(--s3);border:1px solid var(--ac);border-radius:4px;'
+        +'display:grid;gap:8px;padding:9px 12px;align-items:center;'
+        +'grid-template-columns:28px 1fr 72px minmax(110px,auto) 28px 28px;';
+      document.body.appendChild(clone);
+      row.style.opacity='.3';
+    }
+    clone.style.left=(touch.clientX-offX)+'px';
+    clone.style.top=(touch.clientY-offY)+'px';
+    clearOver();
+    const target=rowUnder(touch.clientX,touch.clientY);
+    if(target&&parseInt(target.dataset.ei)!==srcEi)target.classList.add('ex-drag-over');
+  },{passive:false});
+  document.addEventListener('touchend',function(e){
+    if(srcEi===null)return;
+    if(clone){clone.remove();clone=null;}
+    clearOver();
+    if(moved){
+      const touch=e.changedTouches[0];
+      const target=rowUnder(touch.clientX,touch.clientY);
+      if(target)doReorder(parseInt(target.dataset.ei));
+    }
+    const row=getRowByEi(srcEi);if(row)row.style.opacity='';
+    srcEi=null;moved=false;
+  },{passive:true});
+})();
 window.saveProgram=async function(){
   const p=getProg();if(!p)return;
   if(!p.name.trim()){toast('프로그램 이름을 입력하세요');return;}
