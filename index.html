@@ -1437,75 +1437,48 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
 
 // 대체 운동 선택 (idx=-1이면 원래로)
 window.selectAltEx=function(di,ei,idx,weekOff){
-  const isWeek=(weekOff!==undefined&&weekOff!=='undefined');
-  const wl=isWeek?getWeekLog(weekOff):getWeekLog();
+  // weekOff가 숫자면 오늘의기록/주간기록 공통, 'undefined'문자열이면 주간기록 패널
+  const isPanel=(weekOff==='undefined'||weekOff===undefined);
+  const off=isPanel?weekOffset:(typeof weekOff==='number'?weekOff:parseInt(weekOff)||0);
+  const wl=getWeekLog(off);
   const dl=wl.days[di]||{};
   if(!dl.log||!dl.log[ei])return;
   dl.log[ei].altIdx=idx;
 
-  // 대체 운동의 세트 수에 맞게 로그 재초기화
+  // 대체 운동 세트 수 맞춤
   if(idx>=0){
     const prog=programs.find(p=>p.id==(wl.progId||''));
-    if(prog){
-      const dayExs=(isWeek
-        ?(function(){const dow=(new Date((window._todaySelectedDate||new Date().toISOString().slice(0,10))+'T00:00:00').getDay()+6)%7;return dow<prog.days.length?prog.days[dow].exercises||[]:[];})()
-        :(logOpenDay!==null&&logOpenDay<prog.days.length?prog.days[logOpenDay].exercises||[]:[])
-      );
-      const exDef=dayExs[ei]||{};
+    if(prog&&prog.days&&prog.days[di]){
+      const exDef=(prog.days[di].exercises||[])[ei]||{};
       const alts=(Array.isArray(exDef.alts)?exDef.alts:[]).map(a=>typeof a==='object'&&a?a:{name:a||''});
       const altDef=alts[idx];
       if(altDef){
         const isCardio=(altDef.exType==='cardio');
-        if(isCardio){
-          dl.log[ei].sets=[{}];
-        }else{
-          const numSets=parseInt(altDef.sets)||3;
-          // 기존 세트 데이터 유지하되 개수 맞춤
-          const cur=dl.log[ei].sets||[];
-          dl.log[ei].sets=Array.from({length:numSets},(_,si)=>cur[si]||{weight:'',reps:'',done:false});
-        }
+        const cur=dl.log[ei].sets||[];
+        dl.log[ei].sets=isCardio?[{}]:Array.from({length:parseInt(altDef.sets)||3},(_,si)=>cur[si]||{weight:'',reps:'',done:false});
       }
     }
-  }else{
-    // 원래 운동으로 복귀 시 원래 세트 수로 복구는 하지 않음 (기존 데이터 유지)
   }
 
   wl.days[di]=dl;
+  setWeekLogLocal(wl,off);
   const menu=document.getElementById('alt-menu-popup');
   if(menu)menu.remove();
-  if(isWeek){setWeekLogLocal(wl,weekOff);renderToday();}
-  else{setWeekLogLocal(wl);openLogPanel(di);}
+  if(isPanel){openLogPanel(di);}
+  else{renderToday();}
 };
 // 대체 운동 여러 개일 때 팝업 메뉴
 window.showAltMenu=function(btn,di,ei,weekOff){
-  // 기존 팝업 제거
   const existing=document.getElementById('alt-menu-popup');
   if(existing){existing.remove();return;}
-  const isWeek=(weekOff!==undefined&&weekOff!=='undefined');
-  const wl=isWeek?getWeekLog(weekOff):getWeekLog();
-  const prog=weekOff!==undefined?
-    (programs.find(p=>p.id==(wl.progId||''))):
-    (weekProgId?programs.find(p=>p.id===weekProgId):null);
-  // 프로그램 데이터에서 alts 가져오기
+  const isPanel=(weekOff==='undefined'||weekOff===undefined);
+  const off=isPanel?weekOffset:(typeof weekOff==='number'?weekOff:parseInt(weekOff)||0);
+  const wl=getWeekLog(off);
+  const prog=programs.find(p=>p.id==(wl.progId||''));
   let alts=[];
-  if(prog){
-    // 오늘의 기록 탭에서는 progDayIdx 필요
-    const allExs=prog.days.reduce((a,d)=>a.concat(d.exercises||[]),[]);
-    // ei 기준으로 찾기 어려우므로 btn 주변 DOM에서 찾는 대신
-    // 모든 운동을 순회해서 해당 ei의 운동 찾기
-    const dayExs=(function(){
-      // 현재 열린 날의 prog day 찾기
-      if(isWeek){
-        const selDate=new Date((window._todaySelectedDate||new Date().toISOString().slice(0,10))+'T00:00:00');
-        const dow=(selDate.getDay()+6)%7;
-        const numDays=prog.days.length;
-        return dow<numDays?prog.days[dow].exercises||[]:[];
-      }else{
-        return logOpenDay!==null&&logOpenDay<prog.days.length?prog.days[logOpenDay].exercises||[]:[];
-      }
-    })();
-    const exDef=dayExs[ei]||{};
-    alts=Array.isArray(exDef.alts)&&exDef.alts.length?exDef.alts.filter(a=>a&&a.trim()):(exDef.alt?[exDef.alt]:[]);
+  if(prog&&prog.days&&prog.days[di]){
+    const exDef=(prog.days[di].exercises||[])[ei]||{};
+    alts=(Array.isArray(exDef.alts)?exDef.alts:[]).map(a=>typeof a==='object'&&a?a:{name:a||''}).filter(a=>a.name&&a.name.trim());
   }
   if(!alts.length)return;
 
@@ -1518,12 +1491,14 @@ window.showAltMenu=function(btn,di,ei,weekOff){
 
   let inner='<div style="padding:8px 12px;font-family:var(--fm);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--b1);">대체 운동 선택</div>';
   alts.forEach(function(a,ai){
-    inner+='<button onclick="selectAltEx('+di+','+ei+','+ai+','+weekOff+')" style="display:block;width:100%;text-align:left;padding:10px 14px;background:none;border:none;color:var(--t1);font-size:13px;cursor:pointer;border-bottom:1px solid rgba(37,37,48,.5);" onmouseover="this.style.background=\'var(--s3)\'" onmouseout="this.style.background=\'none\'">'+a+'</button>';
+    inner+='<button onclick="selectAltEx('+di+','+ei+','+ai+','+weekOff+')" style="display:block;width:100%;text-align:left;padding:10px 14px;background:none;border:none;color:var(--t1);font-size:13px;cursor:pointer;border-bottom:1px solid rgba(37,37,48,.5);" onmouseover="this.style.background='var(--s3)'" onmouseout="this.style.background='none'">'+a.name+'</button>';
   });
   popup.innerHTML=inner;
   document.body.appendChild(popup);
   setTimeout(function(){
-    document.addEventListener('click',function h(e){if(!popup.contains(e.target)&&e.target!==btn){popup.remove();document.removeEventListener('click',h);}},{once:false,capture:true});
+    document.addEventListener('click',function h(e){
+      if(!popup.contains(e.target)&&e.target!==btn){popup.remove();document.removeEventListener('click',h);}
+    },{capture:true});
   },0);
 };
 window.updateSetField=function(di,ei,si,field,val){
