@@ -875,11 +875,22 @@ function renderEditor(){
         )
         +'<button class="btn btn-sm btn-danger" onclick="removeEx('+ei+')" style="padding:3px 7px;">✕</button>'
         +'</div>'
-        // 대체 운동 입력
-        +'<div class="alt-ex-row">'
-        +'<span class="alt-ex-label">대체</span>'
-        +'<input class="alt-ex-input" value="'+(ex.alt||'')+'" placeholder="대체 운동 (선택)" oninput="updateEx('+ei+',\'alt\',this.value)">'
-        +'</div>';
+        // 대체 운동 입력 (여러 개)
+        +(function(){
+          const alts=Array.isArray(ex.alts)&&ex.alts.length?ex.alts:[];
+          let altHtml='';
+          alts.forEach(function(a,ai){
+            altHtml+='<div class="alt-ex-row">'
+              +'<span class="alt-ex-label">대체'+(alts.length>1?' '+(ai+1):'')+'</span>'
+              +'<input class="alt-ex-input" value="'+(a||'')+'" placeholder="대체 운동 이름" oninput="updateAlt('+ei+','+ai+',this.value)">'
+              +'<button onclick="removeAlt('+ei+','+ai+')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:0 4px;flex-shrink:0;" title="삭제">✕</button>'
+              +'</div>';
+          });
+          altHtml+='<div class="alt-ex-row" style="border-top:'+(alts.length?'1px dashed var(--b1)':'none')+';">'
+            +'<button onclick="addAlt('+ei+')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:11px;font-family:var(--fm);letter-spacing:.1em;padding:2px 4px;display:flex;align-items:center;gap:4px;">+ 대체 운동 추가</button>'
+            +'</div>';
+          return altHtml;
+        })();
     }
 
     const warmupHtml='<div class="ex-section-head">'
@@ -1046,16 +1057,37 @@ window.updateExType=function(ei,v){
   if(v==='cardio') p.days[editingDayIdx].exercises[ei].name='유산소';
   renderEditor();
 };
+window.addAlt=function(ei){
+  const p=getProg();if(!p)return;
+  const ex=p.days[editingDayIdx].exercises[ei];
+  if(!Array.isArray(ex.alts))ex.alts=ex.alt?[ex.alt]:[];
+  ex.alts.push('');
+  delete ex.alt;
+  renderEditor();
+};
+window.removeAlt=function(ei,ai){
+  const p=getProg();if(!p)return;
+  const ex=p.days[editingDayIdx].exercises[ei];
+  if(!Array.isArray(ex.alts))return;
+  ex.alts.splice(ai,1);
+  renderEditor();
+};
+window.updateAlt=function(ei,ai,v){
+  const p=getProg();if(!p)return;
+  const ex=p.days[editingDayIdx].exercises[ei];
+  if(!Array.isArray(ex.alts))ex.alts=[];
+  ex.alts[ai]=v;
+};
 window.addEx=function(){
   const p=getProg();if(!p)return;
   if(!p.days[editingDayIdx].exercises)p.days[editingDayIdx].exercises=[];
-  p.days[editingDayIdx].exercises.push({name:'',sets:'',rest:'',section:'main',alt:''});
+  p.days[editingDayIdx].exercises.push({name:'',sets:'',rest:'',section:'main',alts:[]});
   renderEditor();
 };
 window.addExSection=function(section){
   const p=getProg();if(!p)return;
   if(!p.days[editingDayIdx].exercises)p.days[editingDayIdx].exercises=[];
-  p.days[editingDayIdx].exercises.push({name:'',sets:'',rest:'',section:section,alt:''});
+  p.days[editingDayIdx].exercises.push({name:'',sets:'',rest:'',section:section,alts:[]});
   renderEditor();
 };
 window.removeEx=function(ei){const p=getProg();if(!p)return;p.days[editingDayIdx].exercises.splice(ei,1);renderEditor();};
@@ -1236,9 +1268,16 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
     const sets=parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
     const restTxt=fmtRest(exDef.rest);
     const metaText=isCardio?'유산소 · '+(exDef.duration||ex.duration||'?')+'분':sets+'세트 · 휴식 '+restTxt;
-    const hasAlt=!!(exDef.alt&&exDef.alt.trim());
-    const usingAlt=!!(ex.usingAlt);
-    const displayName=usingAlt&&hasAlt?exDef.alt:(ex.name||exDef.name||'운동');
+    const alts=Array.isArray(exDef.alts)&&exDef.alts.length?exDef.alts.filter(a=>a&&a.trim()):(exDef.alt?[exDef.alt]:[]);
+    const hasAlt=alts.length>0;
+    const altIdx=(typeof ex.altIdx==='number'&&ex.altIdx>=0&&ex.altIdx<alts.length)?ex.altIdx:-1;
+    const usingAlt=altIdx>=0;
+    const displayName=usingAlt?alts[altIdx]:(ex.name||exDef.name||'운동');
+    // 대체 버튼: 여러개면 순환, 하나면 토글
+    const altBtnLabel=usingAlt?'원래':('대체'+(alts.length>1?' ▾':''));
+    const altBtnClick=usingAlt
+      ?'selectAltEx('+dayIdx+','+ei+',-1,'+wkOff+')'
+      :(alts.length===1?'selectAltEx('+dayIdx+','+ei+',0,'+wkOff+')':'showAltMenu(this,'+dayIdx+','+ei+','+wkOff+')');
 
     let block='<div class="log-ex-block">'
       +'<div class="log-ex-header">'
@@ -1249,7 +1288,7 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
       +'<div class="log-ex-meta">'+metaText+'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;">'
-      +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="toggleAltEx('+dayIdx+','+ei+','+wkOff+')">'+(usingAlt?'원래':'대체')+'</button>':'')
+      +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="'+altBtnClick+'">'+altBtnLabel+'</button>':'')
       +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+')">'+(ex.done?'✓':'')+'</button>'
       +'</div>'
       +'</div>';
@@ -1341,15 +1380,69 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
   document.head.appendChild(s);
 })();
 
-window.toggleAltEx=function(di,ei,weekOff){
+// 대체 운동 선택 (idx=-1이면 원래로)
+window.selectAltEx=function(di,ei,idx,weekOff){
   const isWeek=(weekOff!==undefined&&weekOff!=='undefined');
   const wl=isWeek?getWeekLog(weekOff):getWeekLog();
   const dl=wl.days[di]||{};
   if(!dl.log||!dl.log[ei])return;
-  dl.log[ei].usingAlt=!dl.log[ei].usingAlt;
+  dl.log[ei].altIdx=idx;
   wl.days[di]=dl;
+  // 팝업 닫기
+  const menu=document.getElementById('alt-menu-popup');
+  if(menu)menu.remove();
   if(isWeek){setWeekLogLocal(wl,weekOff);renderToday();}
   else{setWeekLogLocal(wl);openLogPanel(di);}
+};
+// 대체 운동 여러 개일 때 팝업 메뉴
+window.showAltMenu=function(btn,di,ei,weekOff){
+  // 기존 팝업 제거
+  const existing=document.getElementById('alt-menu-popup');
+  if(existing){existing.remove();return;}
+  const isWeek=(weekOff!==undefined&&weekOff!=='undefined');
+  const wl=isWeek?getWeekLog(weekOff):getWeekLog();
+  const prog=weekOff!==undefined?
+    (programs.find(p=>p.id==(wl.progId||''))):
+    (weekProgId?programs.find(p=>p.id===weekProgId):null);
+  // 프로그램 데이터에서 alts 가져오기
+  let alts=[];
+  if(prog){
+    // 오늘의 기록 탭에서는 progDayIdx 필요
+    const allExs=prog.days.reduce((a,d)=>a.concat(d.exercises||[]),[]);
+    // ei 기준으로 찾기 어려우므로 btn 주변 DOM에서 찾는 대신
+    // 모든 운동을 순회해서 해당 ei의 운동 찾기
+    const dayExs=(function(){
+      // 현재 열린 날의 prog day 찾기
+      if(isWeek){
+        const selDate=new Date((window._todaySelectedDate||new Date().toISOString().slice(0,10))+'T00:00:00');
+        const dow=(selDate.getDay()+6)%7;
+        const numDays=prog.days.length;
+        return dow<numDays?prog.days[dow].exercises||[]:[];
+      }else{
+        return logOpenDay!==null&&logOpenDay<prog.days.length?prog.days[logOpenDay].exercises||[]:[];
+      }
+    })();
+    const exDef=dayExs[ei]||{};
+    alts=Array.isArray(exDef.alts)&&exDef.alts.length?exDef.alts.filter(a=>a&&a.trim()):(exDef.alt?[exDef.alt]:[]);
+  }
+  if(!alts.length)return;
+
+  const popup=document.createElement('div');
+  popup.id='alt-menu-popup';
+  popup.style.cssText='position:fixed;z-index:9999;background:var(--s2);border:1px solid var(--b2);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:180px;overflow:hidden;';
+  const rect=btn.getBoundingClientRect();
+  popup.style.top=(rect.bottom+6)+'px';
+  popup.style.left=Math.min(rect.left,window.innerWidth-200)+'px';
+
+  let inner='<div style="padding:8px 12px;font-family:var(--fm);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--b1);">대체 운동 선택</div>';
+  alts.forEach(function(a,ai){
+    inner+='<button onclick="selectAltEx('+di+','+ei+','+ai+','+weekOff+')" style="display:block;width:100%;text-align:left;padding:10px 14px;background:none;border:none;color:var(--t1);font-size:13px;cursor:pointer;border-bottom:1px solid rgba(37,37,48,.5);" onmouseover="this.style.background=\'var(--s3)\'" onmouseout="this.style.background=\'none\'">'+a+'</button>';
+  });
+  popup.innerHTML=inner;
+  document.body.appendChild(popup);
+  setTimeout(function(){
+    document.addEventListener('click',function h(e){if(!popup.contains(e.target)&&e.target!==btn){popup.remove();document.removeEventListener('click',h);}},{once:false,capture:true});
+  },0);
 };
 window.updateSetField=function(di,ei,si,field,val){
   const wl=getWeekLog();const dl=wl.days[di]||{};
@@ -1412,6 +1505,7 @@ function renderToday(){
 
   // 선택된 날짜 (없으면 오늘)
   if(!todaySelectedDate)todaySelectedDate=todayStr;
+  window._todaySelectedDate=todaySelectedDate;
 
   // 선택 날짜 기준 주간 정보
   const selDate=new Date(todaySelectedDate+'T00:00:00');
@@ -1519,9 +1613,15 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
     const sets=parseInt(exDef.sets)||ex.sets&&ex.sets.length||3;
     const restTxt=fmtRest(exDef.rest);
     const metaText=isCardio?'유산소 · '+(exDef.duration||ex.duration||'?')+'분':sets+'세트 · 휴식 '+restTxt;
-    const hasAlt=!!(exDef.alt&&exDef.alt.trim());
-    const usingAlt=!!(ex.usingAlt);
-    const displayName=usingAlt&&hasAlt?exDef.alt:(ex.name||exDef.name||'운동');
+    const alts=Array.isArray(exDef.alts)&&exDef.alts.length?exDef.alts.filter(a=>a&&a.trim()):(exDef.alt?[exDef.alt]:[]);
+    const hasAlt=alts.length>0;
+    const altIdx=(typeof ex.altIdx==='number'&&ex.altIdx>=0&&ex.altIdx<alts.length)?ex.altIdx:-1;
+    const usingAlt=altIdx>=0;
+    const displayName=usingAlt?alts[altIdx]:(ex.name||exDef.name||'운동');
+    const altBtnLabel=usingAlt?'원래':('대체'+(alts.length>1?' ▾':''));
+    const altBtnClick=usingAlt
+      ?'selectAltEx('+dayIdx+','+ei+',-1,'+weekOff+')'
+      :(alts.length===1?'selectAltEx('+dayIdx+','+ei+',0,'+weekOff+')':'showAltMenu(this,'+dayIdx+','+ei+','+weekOff+')');
 
     let block='<div class="log-ex-block">'
       +'<div class="log-ex-header">'
@@ -1532,7 +1632,7 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       +'<div class="log-ex-meta">'+metaText+'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;">'
-      +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="toggleAltEx('+dayIdx+','+ei+','+weekOff+')">'+(usingAlt?'원래':'대체')+'</button>':'')
+      +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="'+altBtnClick+'">'+altBtnLabel+'</button>':'')
       +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+','+weekOff+')">'+(ex.done?'✓':'')+'</button>'
       +'</div>'
       +'</div>';
