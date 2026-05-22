@@ -1491,7 +1491,7 @@ window.showAltMenu=function(btn,di,ei,weekOff){
 
   let inner='<div style="padding:8px 12px;font-family:var(--fm);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--b1);">대체 운동 선택</div>';
   alts.forEach(function(a,ai){
-    inner+='<button onclick="selectAltEx('+di+','+ei+','+ai+','+weekOff+')" style="display:block;width:100%;text-align:left;padding:10px 14px;background:none;border:none;color:var(--t1);font-size:13px;cursor:pointer;border-bottom:1px solid rgba(37,37,48,.5);" onmouseover="this.style.background='var(--s3)'" onmouseout="this.style.background='none'">'+a.name+'</button>';
+    inner+='<button onclick="selectAltEx('+di+','+ei+','+ai+','+weekOff+')" style="display:block;width:100%;text-align:left;padding:10px 14px;background:none;border:none;color:var(--t1);font-size:13px;cursor:pointer;border-bottom:1px solid rgba(37,37,48,.5);">'+a.name+'<\/button>';
   });
   popup.innerHTML=inner;
   document.body.appendChild(popup);
