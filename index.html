@@ -698,9 +698,24 @@ window.enterAs=function(user){
     c.style.display='none';
     document.getElementById('app').style.display='block';
     programs=[];logs={};
-    await loadAllData();
+
+    // 1) localStorage 캐시로 즉시 렌더
+    programs=lsLoad('rtp_programs_'+currentUser)||[];
+    logs=lsLoad('rtp_logs_'+currentUser)||{};
     renderProgList();
     renderToday();
+
+    // 2) Firebase 준비될 때까지 기다린 후 최신 데이터로 갱신
+    const firebaseLoad=async ()=>{
+      await loadAllData();
+      renderProgList();
+      renderToday();
+    };
+    if(window._firebaseReady){
+      firebaseLoad();
+    }else{
+      document.addEventListener('firebase-ready',firebaseLoad,{once:true});
+    }
   },440);
 };
 window.goHome=function(){
