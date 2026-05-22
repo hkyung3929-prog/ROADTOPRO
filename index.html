@@ -45,7 +45,7 @@ button,input,select,textarea{font-family:inherit;}
 .btn-enter-label{font-family:var(--fh);font-size:20px;font-weight:900;font-style:italic;letter-spacing:.18em;text-transform:uppercase;color:#000;position:relative;z-index:1;}
 .btn-enter-arrow{font-family:var(--fm);font-size:15px;color:rgba(0,0,0,.65);position:relative;z-index:1;transition:transform .25s;}
 .btn-enter:hover .btn-enter-arrow{transform:translateX(5px);}
-.cover-bottom-line{position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--ac),var(--ac2),var(--ac),transparent);background-size:200%;animation:shimmer 3s linear infinite;}
+.cover-bottom-line{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--ac),var(--ac2),var(--ac),transparent);background-size:200%;animation:shimmer 3s linear infinite;}
 @keyframes shimmer{to{background-position:-200% 0;}}
 #cover.exit{animation:coverOut .42s ease forwards;}
 @keyframes coverOut{to{opacity:0;transform:scale(1.03);pointer-events:none;}}
@@ -247,6 +247,83 @@ select.inp{cursor:pointer;}
 
 @media(max-width:900px){.prog-layout{grid-template-columns:1fr;}.day-grid{grid-template-columns:repeat(4,1fr);}.stats-strip{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:540px){.day-grid{grid-template-columns:repeat(3,1fr);}}
+
+/* ── 모바일 반응형 ── */
+@media(max-width:600px){
+  /* 전체 여백 축소 */
+  .wrap{padding:16px 12px;}
+  .today-wrap{padding:16px 12px;}
+  .card-body{padding:14px 12px;}
+  .card-head{padding:10px 14px;}
+
+  /* 헤더 */
+  .app-header{padding:0 14px;}
+  .header-sub{display:none;}
+  .header-sep{display:none;}
+
+  /* 탭바 */
+  .tab-btn{padding:10px 12px;font-size:12px;letter-spacing:.06em;}
+
+  /* 프로그램 에디터 - 운동 테이블을 카드형으로 */
+  .ex-table-head{display:none;}
+  .ex-row{display:flex!important;flex-direction:column;gap:6px!important;padding:10px 12px;border-bottom:1px solid var(--b1);}
+  .ex-row>input:first-child{font-size:13px;font-weight:600;}
+  .ex-row-fields{display:flex!important;gap:6px;}
+  .ex-row-fields input{flex:1;}
+
+  /* DAY 탭 관리 영역 */
+  .day-tabs{gap:4px;}
+  .day-tab{padding:5px 10px;font-size:12px;}
+
+  /* 주간 기록 - 7일 그리드 */
+  .day-grid{grid-template-columns:repeat(7,1fr);gap:4px;}
+  .day-card-head{padding:6px 6px;}
+  .day-card-body{padding:6px 6px;min-height:48px;}
+  .day-card-num{font-size:16px;}
+  .day-card-date{font-size:8px;}
+  .day-card-label{font-size:8px;}
+  .day-preview{font-size:9px;}
+  .day-preview strong{font-size:9px;}
+
+  /* 통계 스트립 */
+  .stats-strip{grid-template-columns:repeat(2,1fr);gap:6px;}
+  .stat{padding:10px 12px;}
+  .stat-val{font-size:24px;}
+
+  /* 주간 헤더 */
+  .week-title{font-size:18px;}
+  .week-nav-btn{width:30px;height:30px;font-size:14px;}
+  .week-prog-row{padding:8px 12px;gap:6px;}
+  .prog-chip{padding:4px 10px;font-size:12px;}
+
+  /* 로그 패널 */
+  .log-panel-head{padding:10px 14px;}
+  .log-panel-body{padding:14px;}
+  .log-panel-title{font-size:16px;}
+  .log-sets-head{grid-template-columns:30px 1fr 1fr!important;}
+  .log-set-row{grid-template-columns:30px 1fr 1fr!important;}
+
+  /* 오늘의 기록 */
+  .today-hero{padding:16px 16px;}
+  .today-day-title{font-size:30px;}
+  .today-panel-head{padding:10px 14px;}
+  .today-panel-body{padding:14px;}
+
+  /* 주간 스트립 */
+  .today-week-strip{gap:3px;}
+  .twday{padding:6px 2px;}
+  .twday-name{font-size:8px;}
+  .twday-date{font-size:10px;}
+
+  /* 프로그램 리스트 사이드바 */
+  .prog-sidebar-title{font-size:20px;}
+  .prog-item{padding:10px 12px;}
+  .prog-item-name{font-size:13px;}
+
+  /* 프로그램 편집기 헤더 */
+  .prog-bar-wrap{padding:10px 14px;}
+  .prog-bar-pct{font-size:11px;}
+}
 
 /* ── COVER CHOICE ── */
 #cover-phase2 { animation: fadeUp .35s ease both; display:flex; flex-direction:column; align-items:center; gap:20px; }
@@ -730,19 +807,21 @@ function renderEditor(){
     editorBody='<div class="rest-day-card"><span class="rest-icon">🌿</span>REST DAY'
       +'<div class="rest-desc">이 날은 휴식일입니다. 운동 기록이 표시되지 않습니다.</div></div>';
   }else if(day){
-    const colT='1fr 60px 80px 90px 32px';
+    const colT='1fr 80px 90px 32px';
     const exRowsHtml=day.exercises&&day.exercises.length
       ?day.exercises.map(function(ex,ei){
         const isCardio=(ex.exType==='cardio');
         return '<div class="ex-row" style="grid-template-columns:'+colT+'">'
-          +'<input value="'+(ex.name||'')+'" placeholder="운동 이름" oninput="updateEx('+ei+',\'name\',this.value)">'
-          +'<select style="text-align:center;font-family:var(--fm);font-size:11px;background:var(--s3);border:1px solid var(--b1);border-radius:4px;color:'+(isCardio?'var(--ac2)':'var(--t1)')+';padding:4px 2px;cursor:pointer;" onchange="updateExType('+ei+',this.value)">'
-          +'<option value="strength"'+(isCardio?'':' selected')+'>근력</option>'
-          +'<option value="cardio"'+(isCardio?' selected':'')+'>유산소</option>'
-          +'</select>'
+          +'<input value="'+(ex.name||'')+'" placeholder="운동 이름" oninput="updateExName('+ei+',this.value)">'
           +(isCardio
-            ?'<input value="'+(ex.duration||'')+'" placeholder="분" type="number" min="0" oninput="updateEx('+ei+',\'duration\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;" title="시간(분)"><span style="display:flex;align-items:center;font-size:10px;color:var(--t3);font-family:var(--fm);">세트없음</span>'
-            :'<input value="'+(ex.sets||'')+'" placeholder="3" type="number" min="1" oninput="updateEx('+ei+',\'sets\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;"><input value="'+(ex.rest||'')+'" placeholder="90" type="number" min="0" oninput="updateEx('+ei+',\'rest\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
+            ?'<div class="ex-row-fields" style="display:contents;">'
+              +'<input value="'+(ex.duration||'')+'" placeholder="분" type="number" min="0" oninput="updateEx('+ei+',\'duration\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;" title="시간(분)">'
+              +'<span style="display:flex;align-items:center;font-size:10px;color:var(--ac2);font-family:var(--fm);white-space:nowrap;">유산소</span>'
+              +'</div>'
+            :'<div class="ex-row-fields" style="display:contents;">'
+              +'<input value="'+(ex.sets||'')+'" placeholder="3" type="number" min="1" oninput="updateEx('+ei+',\'sets\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
+              +'<input value="'+(ex.rest||'')+'" placeholder="90" type="number" min="0" oninput="updateEx('+ei+',\'rest\',this.value)" style="text-align:center;font-family:var(--fm);font-size:12px;">'
+              +'</div>'
           )
           +'<button class="btn btn-sm btn-danger" onclick="removeEx('+ei+')" style="padding:3px 7px;">✕</button>'
           +'</div>';
@@ -754,7 +833,7 @@ function renderEditor(){
       +'<span class="sec-label">운동 목록</span>'
       +'<div style="border:1px solid var(--b1);border-radius:var(--r);overflow:hidden;margin-bottom:10px;">'
       +'<div class="ex-table-head" style="grid-template-columns:'+colT+'">'
-      +'<span>운동 이름</span><span style="text-align:center">타입</span><span style="text-align:center">세트/시간</span><span style="text-align:center">휴식(초)</span><span></span>'
+      +'<span>운동 이름</span><span style="text-align:center">세트/시간</span><span style="text-align:center">휴식(초)</span><span></span>'
       +'</div>'
       +'<div id="ex-rows">'+exRowsHtml+'</div></div>'
       +'<button class="btn btn-ghost btn-sm" onclick="addEx()" style="width:100%;justify-content:center;border-style:dashed;">+ 운동 추가</button>';
@@ -872,6 +951,15 @@ window.updateProgName=function(v){const p=getProg();if(p)p.name=v;};
 window.updateProgDate=function(f,v){const p=getProg();if(p)p[f]=v;};
 window.updateDayLabel=function(v){const p=getProg();if(p)p.days[editingDayIdx].label=v;};
 window.updateEx=function(ei,f,v){const p=getProg();if(!p)return;p.days[editingDayIdx].exercises[ei][f]=v;};
+window.updateExName=function(ei,v){
+  const p=getProg();if(!p)return;
+  const ex=p.days[editingDayIdx].exercises[ei];
+  ex.name=v;
+  const wasCardio=(ex.exType==='cardio');
+  const isCardio=v.includes('유산소');
+  ex.exType=isCardio?'cardio':'strength';
+  if(wasCardio!==isCardio) renderEditor();
+};
 window.updateExType=function(ei,v){
   const p=getProg();if(!p)return;
   p.days[editingDayIdx].exercises[ei].exType=v;
