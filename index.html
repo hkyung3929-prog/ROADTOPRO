@@ -789,7 +789,8 @@ function buildDayTabs(){
   p.days.forEach(function(d,i){
     const isRest=(d.type==='rest');
     const workoutNum=!isRest?p.days.slice(0,i+1).filter(function(x){return x.type!=='rest';}).length:0;
-    const label=isRest?'🌿 REST':('DAY '+workoutNum+(d.label&&d.label!==('Day '+workoutNum)?' · '+d.label:''));
+    const customLabel=(!isRest&&d.label&&!/^Day\s*\d+$/i.test(d.label.trim()))?(' · '+d.label):'';
+    const label=isRest?'🌿 REST':('DAY '+workoutNum+customLabel);
     const btn=document.createElement('button');
     btn.className='day-tab'+(isRest?' rest-tab':'')+(editingDayIdx===i?' on':'');
     btn.textContent=label;
