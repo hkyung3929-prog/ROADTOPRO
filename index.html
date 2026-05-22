@@ -875,6 +875,7 @@ window.updateEx=function(ei,f,v){const p=getProg();if(!p)return;p.days[editingDa
 window.updateExType=function(ei,v){
   const p=getProg();if(!p)return;
   p.days[editingDayIdx].exercises[ei].exType=v;
+  if(v==='cardio') p.days[editingDayIdx].exercises[ei].name='유산소';
   renderEditor();
 };
 window.addEx=function(){
