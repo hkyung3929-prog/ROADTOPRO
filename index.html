@@ -963,7 +963,7 @@ function renderEditor(){
   buildDayTabs();
 }
 
-/* ── 드래그앤드롭 탭 ── */
+/* ── 드래그앤드롭 탭 (마우스 + 터치 지원) ── */
 function buildDayTabs(){
   const p=getProg();if(!p)return;
   const container=document.getElementById('day-tabs-drag');if(!container)return;
@@ -980,16 +980,23 @@ function buildDayTabs(){
     btn.dataset.idx=i;
     btn.draggable=true;
     btn.style.cursor='grab';
+    // 마우스 이벤트
     btn.addEventListener('click',function(){window.switchDay(i);});
     btn.addEventListener('dragstart',onTabDragStart);
     btn.addEventListener('dragover',onTabDragOver);
     btn.addEventListener('drop',onTabDrop);
     btn.addEventListener('dragend',onTabDragEnd);
+    // 터치 이벤트
+    btn.addEventListener('touchstart',onTabTouchStart,{passive:false});
+    btn.addEventListener('touchmove',onTabTouchMove,{passive:false});
+    btn.addEventListener('touchend',onTabTouchEnd,{passive:false});
     container.appendChild(btn);
   });
 }
 
 let dragSrcIdx=null;
+
+/* ── 마우스 드래그 핸들러 ── */
 function onTabDragStart(e){
   dragSrcIdx=parseInt(e.currentTarget.dataset.idx);
   e.currentTarget.style.opacity='0.45';
@@ -1009,7 +1016,6 @@ function onTabDrop(e){
   const p=getProg();if(!p)return;
   const moved=p.days.splice(dragSrcIdx,1)[0];
   p.days.splice(targetIdx,0,moved);
-  // 선택 인덱스 추적
   if(editingDayIdx===dragSrcIdx){editingDayIdx=targetIdx;}
   else if(dragSrcIdx<editingDayIdx&&targetIdx>=editingDayIdx){editingDayIdx--;}
   else if(dragSrcIdx>editingDayIdx&&targetIdx<=editingDayIdx){editingDayIdx++;}
@@ -1020,6 +1026,97 @@ function onTabDragEnd(e){
   e.currentTarget.style.opacity='';
   document.querySelectorAll('#day-tabs-drag .day-tab').forEach(function(b){b.style.outline='';});
   dragSrcIdx=null;
+}
+
+/* ── 터치 드래그 핸들러 ── */
+let _touchDragSrcIdx=null;
+let _touchClone=null;
+let _touchOffsetX=0;
+let _touchOffsetY=0;
+let _touchMoved=false;
+
+function onTabTouchStart(e){
+  const btn=e.currentTarget;
+  _touchDragSrcIdx=parseInt(btn.dataset.idx);
+  _touchMoved=false;
+  const touch=e.touches[0];
+  const rect=btn.getBoundingClientRect();
+  _touchOffsetX=touch.clientX-rect.left;
+  _touchOffsetY=touch.clientY-rect.top;
+}
+
+function onTabTouchMove(e){
+  if(_touchDragSrcIdx===null)return;
+  const touch=e.touches[0];
+
+  // 첫 움직임 감지 시 클론 생성
+  if(!_touchClone){
+    _touchMoved=true;
+    const src=document.querySelector('#day-tabs-drag .day-tab[data-idx="'+_touchDragSrcIdx+'"]');
+    if(!src)return;
+    _touchClone=src.cloneNode(true);
+    _touchClone.style.cssText='position:fixed;z-index:9999;opacity:0.85;pointer-events:none;'
+      +'background:var(--s3);border:2px solid var(--ac);border-radius:4px;'
+      +'padding:6px 16px;font-family:var(--fh);font-size:13px;font-weight:700;'
+      +'font-style:italic;letter-spacing:.08em;text-transform:uppercase;color:var(--ac);'
+      +'white-space:nowrap;box-shadow:0 4px 20px rgba(255,106,0,.4);';
+    document.body.appendChild(_touchClone);
+    src.style.opacity='0.35';
+  }
+
+  e.preventDefault(); // 스크롤 방지
+
+  // 클론 위치 업데이트
+  _touchClone.style.left=(touch.clientX-_touchOffsetX)+'px';
+  _touchClone.style.top=(touch.clientY-_touchOffsetY)+'px';
+
+  // 현재 손가락 아래 버튼 하이라이트
+  _touchClone.style.display='none';
+  const el=document.elementFromPoint(touch.clientX,touch.clientY);
+  _touchClone.style.display='';
+  document.querySelectorAll('#day-tabs-drag .day-tab').forEach(function(b){b.style.outline='';});
+  if(el){
+    const target=el.closest('.day-tab');
+    if(target&&target.dataset.idx!==String(_touchDragSrcIdx)){
+      target.style.outline='2px solid var(--ac)';
+    }
+  }
+}
+
+function onTabTouchEnd(e){
+  // 클론 제거 및 원본 복원
+  if(_touchClone){_touchClone.remove();_touchClone=null;}
+  document.querySelectorAll('#day-tabs-drag .day-tab').forEach(function(b){
+    b.style.opacity='';b.style.outline='';
+  });
+
+  if(!_touchMoved){
+    // 짧은 탭 → 일반 클릭으로 처리
+    if(_touchDragSrcIdx!==null){window.switchDay(_touchDragSrcIdx);}
+    _touchDragSrcIdx=null;
+    return;
+  }
+
+  const touch=e.changedTouches[0];
+  const el=document.elementFromPoint(touch.clientX,touch.clientY);
+  if(el){
+    const target=el.closest('.day-tab');
+    if(target){
+      const targetIdx=parseInt(target.dataset.idx);
+      if(_touchDragSrcIdx!==null&&_touchDragSrcIdx!==targetIdx){
+        const p=getProg();if(p){
+          const moved=p.days.splice(_touchDragSrcIdx,1)[0];
+          p.days.splice(targetIdx,0,moved);
+          if(editingDayIdx===_touchDragSrcIdx){editingDayIdx=targetIdx;}
+          else if(_touchDragSrcIdx<editingDayIdx&&targetIdx>=editingDayIdx){editingDayIdx--;}
+          else if(_touchDragSrcIdx>editingDayIdx&&targetIdx<=editingDayIdx){editingDayIdx++;}
+          renderEditor();
+        }
+      }
+    }
+  }
+  _touchDragSrcIdx=null;
+  _touchMoved=false;
 }
 
 window.switchDay=function(i){editingDayIdx=i;renderEditor();};
