@@ -1762,6 +1762,29 @@ window.updateSetField=function(di,ei,si,field,val){
   dl.log[ei].sets[si][field]=val;
   wl.days[di]=dl;setWeekLogLocal(wl);
 };
+// 자동저장 debounce (오늘의 기록용)
+var _autoSaveTimer=null;
+function scheduleAutoSave(weekOff){
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer=setTimeout(async function(){
+    await saveWeekLog(weekOff===undefined?0:weekOff);
+    toast('✓ 자동 저장됨','var(--green)');
+  },800);
+}
+
+// 체크 버튼 UI만 업데이트 (스크롤 없이)
+function updateCheckBtnUI(di,ei,done){
+  // today-log-body 안의 log-ex-block들을 순서대로 찾아 업데이트
+  const body=document.getElementById('today-log-body');
+  if(!body)return;
+  const blocks=body.querySelectorAll('.log-ex-block');
+  if(!blocks[ei])return;
+  const btn=blocks[ei].querySelector('.log-check');
+  if(!btn)return;
+  if(done){btn.classList.add('on');btn.textContent='✓';}
+  else{btn.classList.remove('on');btn.textContent='';}
+}
+
 // 모든 세트에 중량+횟수가 입력되면 자동 체크
 window.autoCheckSets=function(di,ei,weekOff){
   const isWeek=(weekOff!==undefined);
@@ -1769,11 +1792,22 @@ window.autoCheckSets=function(di,ei,weekOff){
   const dl=wl.days[di]||{};
   if(!dl.log||!dl.log[ei]||!dl.log[ei].sets)return;
   const allFilled=dl.log[ei].sets.every(function(s){return (s.weight!==''&&s.weight!==null&&s.weight!==undefined)&&(s.reps!==''&&s.reps!==null&&s.reps!==undefined);});
-  if(allFilled&&!dl.log[ei].done){
-    dl.log[ei].done=true;
-    wl.days[di]=dl;
-    if(isWeek){setWeekLogLocal(wl,weekOff);renderToday();}
-    else{setWeekLogLocal(wl);openLogPanel(di);}
+  if(isWeek){
+    if(allFilled&&!dl.log[ei].done){
+      dl.log[ei].done=true;
+      wl.days[di]=dl;
+      setWeekLogLocal(wl,weekOff);
+      updateCheckBtnUI(di,ei,true);
+    }
+    scheduleAutoSave(weekOff);
+  }else{
+    if(allFilled&&!dl.log[ei].done){
+      dl.log[ei].done=true;
+      wl.days[di]=dl;
+      setWeekLogLocal(wl);openLogPanel(di);
+    }else{
+      setWeekLogLocal(wl);
+    }
   }
 };
 window.autoCheckCardio=function(di,ei,weekOff){
@@ -1782,11 +1816,22 @@ window.autoCheckCardio=function(di,ei,weekOff){
   const dl=wl.days[di]||{};
   if(!dl.log||!dl.log[ei])return;
   const hasTime=dl.log[ei].sets&&dl.log[ei].sets[0]&&dl.log[ei].sets[0].time;
-  if(hasTime&&!dl.log[ei].done){
-    dl.log[ei].done=true;
-    wl.days[di]=dl;
-    if(isWeek){setWeekLogLocal(wl,weekOff);renderToday();}
-    else{setWeekLogLocal(wl);openLogPanel(di);}
+  if(isWeek){
+    if(hasTime&&!dl.log[ei].done){
+      dl.log[ei].done=true;
+      wl.days[di]=dl;
+      setWeekLogLocal(wl,weekOff);
+      updateCheckBtnUI(di,ei,true);
+    }
+    scheduleAutoSave(weekOff);
+  }else{
+    if(hasTime&&!dl.log[ei].done){
+      dl.log[ei].done=true;
+      wl.days[di]=dl;
+      setWeekLogLocal(wl);openLogPanel(di);
+    }else{
+      setWeekLogLocal(wl);
+    }
   }
 };
 window.updateNotes=function(di,val){
@@ -2006,9 +2051,11 @@ window.updateSetFieldWeek=function(di,ei,si,field,val,weekOff){
   if(!dl.log[ei].sets[si])dl.log[ei].sets[si]={};
   dl.log[ei].sets[si][field]=val;
   wl.days[di]=dl;setWeekLogLocal(wl,weekOff);
+  // autoCheckSets/autoCheckCardio가 이어서 호출되므로 거기서 scheduleAutoSave 처리
 };
 window.updateNotesWeek=function(di,val,weekOff){
   const wl=getWeekLog(weekOff);wl.days[di]=wl.days[di]||{};wl.days[di].notes=val;setWeekLogLocal(wl,weekOff);
+  scheduleAutoSave(weekOff);
 };
 window.toggleExDoneTodayWeek=function(di,ei,weekOff){
   const wl=getWeekLog(weekOff);const dl=wl.days[di]||{};if(!dl.log)return;
