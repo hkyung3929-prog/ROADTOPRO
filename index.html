@@ -284,6 +284,22 @@ select.inp{cursor:pointer;}
 .today-panel-title em{color:var(--ac);font-style:normal;margin-right:8px;}
 .today-panel-body{padding:20px 22px;}
 
+/* TODAY EDIT MODE */
+.today-edit-bar{display:flex;align-items:center;gap:8px;padding:10px 22px;background:rgba(255,106,0,.05);border-bottom:1px solid rgba(255,106,0,.15);}
+.today-edit-bar-label{font-family:var(--fm);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ac);flex:1;}
+.log-ex-block.edit-mode{border-color:rgba(255,106,0,.25);}
+.log-ex-del{width:26px;height:26px;border-radius:4px;border:1px solid transparent;background:transparent;cursor:pointer;color:var(--t3);font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;}
+.log-ex-del:hover{color:var(--ac);border-color:rgba(255,106,0,.3);background:rgba(255,106,0,.06);}
+.today-add-ex-row{background:var(--s2);border:1px dashed var(--b2);border-radius:8px;padding:14px 16px;margin-bottom:12px;}
+.today-add-ex-row .add-ex-title{font-family:var(--fm);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--t3);margin-bottom:10px;}
+.today-add-ex-inputs{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
+.today-add-ex-inputs .inp{flex:1;min-width:120px;}
+.today-add-ex-inputs select.inp{min-width:100px;flex:0 0 auto;}
+.btn-today-edit{padding:5px 12px;border-radius:4px;border:1px solid var(--b2);background:transparent;color:var(--t2);font-size:12px;font-family:var(--fm);cursor:pointer;transition:all .15s;}
+.btn-today-edit:hover{border-color:var(--ac2);color:var(--ac2);}
+.btn-today-edit.active{border-color:var(--ac);color:var(--ac);background:rgba(255,106,0,.07);}
+.today-rest-toggle{display:flex;align-items:center;justify-content:center;gap:12px;padding:20px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:16px;}
+
 /* 부위 드롭다운 */
 .muscle-sel{background:var(--s3);border:1px solid var(--b1);border-radius:4px;color:var(--t2);font-family:var(--fm);font-size:11px;padding:3px 6px;outline:none;cursor:pointer;transition:border-color .15s;min-width:64px;}
 .muscle-sel:focus{border-color:var(--ac);}
@@ -1971,7 +1987,9 @@ function renderToday(){
   // 프로그램 day 수에 맞게 인덱스 처리
   const numProgDays=activeProg.days.length;
   const progDayIdx=Math.min(selWeekDow,numProgDays-1);
-  const pd=activeProg.days[progDayIdx];
+  const dl=wl.days[selWeekDow]||{};
+  // pdOverride가 있으면 (오늘 편집으로 수정된 경우) 그것을 우선 사용
+  const pd=dl.pdOverride||activeProg.days[progDayIdx];
   const isProgRestDay=pd&&pd.type==='rest';
 
   if(isProgRestDay){
@@ -1986,7 +2004,6 @@ function renderToday(){
 
   // 운동 day 번호 (휴식 제외 카운트)
   const workoutDayNum=activeProg.days.slice(0,progDayIdx+1).filter(function(d){return d.type!=='rest';}).length;
-  const dl=wl.days[selWeekDow]||{};
   const isDone=!!dl.done;
   const isPast=todaySelectedDate<todayStr;
 
@@ -2001,7 +2018,10 @@ function renderToday(){
   logWrap.innerHTML='<div class="today-panel">'
     +'<div class="today-panel-head">'
     +'<div class="today-panel-title"><em>DAY 0'+workoutDayNum+'</em>'+pd.label+'</div>'
+    +'<div style="display:flex;gap:6px;align-items:center;">'
+    +'<button class="btn-today-edit'+(window._todayEditMode?' active':'')+'" id="btn-today-edit" onclick="toggleTodayEditMode('+selWeekDow+','+selWeekOff+')" title="오늘 운동 편집">✏️ 편집</button>'
     +'<button class="btn btn-sm btn-gold'+(isDone?' filled':'')+'" id="btn-today-done" onclick="toggleTodayDone('+selWeekDow+','+selWeekOff+')">'+(isDone?'✓ 완료됨':'완료 체크')+'</button>'
+    +'</div>'
     +'</div>'
     +'<div class="today-panel-body" id="today-log-body"></div>'
     +'</div>';
@@ -2010,7 +2030,12 @@ function renderToday(){
 }
 
 function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
-  if(!dl.log||dl.log.length!==pd.exercises.length){
+  // pdOverride가 있으면 log 길이가 달라도 강제 초기화 안 함 (이미 편집된 상태)
+  const hasOverride=!!dl.pdOverride;
+  if(!dl.log){
+    dl.log=makeEmptyLog(pd);
+    wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);
+  } else if(!hasOverride&&dl.log.length!==pd.exercises.length){
     dl.log=makeEmptyLog(pd);
     wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);
   }
@@ -2044,7 +2069,7 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       ?'selectAltEx('+dayIdx+','+ei+',-1,'+weekOff+')'
       :(alts.length===1?'selectAltEx('+dayIdx+','+ei+',0,'+weekOff+')':'showAltMenu(this,'+dayIdx+','+ei+','+weekOff+')');
 
-    let block='<div class="log-ex-block">'
+    let block='<div class="log-ex-block'+(isEditMode?' edit-mode':'')+'">'
       +'<div class="log-ex-header">'
       +'<div class="log-ex-header-left">'
       +'<div class="log-ex-title">'+displayName
@@ -2053,6 +2078,7 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       +'<div class="log-ex-meta">'+activeMetaText+'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;">'
+      +(isEditMode?'<button class="log-ex-del" onclick="todayRemoveExercise('+dayIdx+','+ei+','+weekOff+')" title="삭제">✕</button>':'')
       +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="'+altBtnClick+'">'+altBtnLabel+'</button>':'')
       +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+','+weekOff+')">'+(ex.done?'✓':'')+'</button>'
       +'</div>'
@@ -2085,7 +2111,17 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
     return block+'</div>';
   }
 
+  const isEditMode=!!window._todayEditMode;
+
   let html='';
+  // 편집 모드 바
+  if(isEditMode){
+    html+='<div class="today-edit-bar">'
+      +'<span class="today-edit-bar-label">✏️ 편집 모드 — 운동을 추가/삭제하거나 휴식일로 전환할 수 있습니다</span>'
+      +'<button class="btn btn-sm" style="border:1px solid var(--b2);background:rgba(50,50,63,.4);color:var(--t3);font-size:11px;" onclick="todaySetRestOverride('+dayIdx+','+weekOff+')">🌿 휴식일로 전환</button>'
+      +'</div>';
+  }
+
   if(warmups.length){
     html+='<div style="font-family:var(--fm);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#7ec8e3;padding:10px 0 6px;">🔵 스트레칭 &amp; 선행운동</div>';
     warmups.forEach(({ex:exDef,i})=>{ html+=renderExBlock(exDef,i); });
@@ -2094,6 +2130,27 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
     html+='<div style="font-family:var(--fm);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ac2);padding:10px 0 6px;">🔶 본운동</div>';
     mains.forEach(({ex:exDef,i})=>{ html+=renderExBlock(exDef,i); });
   }
+
+  // 편집 모드: 운동 추가 UI
+  if(isEditMode){
+    html+='<div class="today-add-ex-row">'
+      +'<div class="add-ex-title">+ 운동 추가</div>'
+      +'<div class="today-add-ex-inputs">'
+      +'<input class="inp" id="today-add-name" placeholder="운동명" style="flex:2;min-width:140px;">'
+      +'<select class="inp" id="today-add-section" style="min-width:100px;">'
+      +'<option value="main">본운동</option>'
+      +'<option value="warmup">스트레칭</option>'
+      +'</select>'
+      +'<select class="inp" id="today-add-type" style="min-width:90px;">'
+      +'<option value="">웨이트</option>'
+      +'<option value="cardio">유산소</option>'
+      +'</select>'
+      +'<input class="inp" id="today-add-sets" type="number" min="1" max="10" placeholder="세트 수" style="width:80px;flex:0 0 auto;">'
+      +'<button class="btn btn-sm btn-ghost" onclick="todayAddExercise('+dayIdx+','+weekOff+')" style="flex-shrink:0;white-space:nowrap;">추가</button>'
+      +'</div>'
+      +'</div>';
+  }
+
   html+='<div style="margin-top:16px;"><span class="sec-label">메모</span>'
     +'<textarea class="inp" rows="2" placeholder="오늘의 컨디션, 느낀 점…"'
     +' oninput="updateNotesWeek('+dayIdx+',this.value,'+weekOff+')">'+(dl.notes||'')+'</textarea></div>'
@@ -2190,6 +2247,94 @@ logs=lsLoad('rtp_logs_tiger')||{};
   // 첫 시작은 약간 딜레이
   setTimeout(runLoop, 800);
 })();
+
+/* ── 오늘의 기록 편집 모드 ── */
+window._todayEditMode=false;
+
+window.toggleTodayEditMode=function(dayIdx,weekOff){
+  window._todayEditMode=!window._todayEditMode;
+  renderToday();
+  if(window._todayEditMode) toast('✏️ 편집 모드 ON — 운동을 추가/삭제할 수 있습니다','var(--ac2)');
+  else toast('편집 모드 OFF','var(--t2)');
+};
+
+window.todayRemoveExercise=function(dayIdx,exIdx,weekOff){
+  const wl=getWeekLog(weekOff);
+  const dl=wl.days[dayIdx]||{};
+  if(!dl.pdOverride){
+    const prog=programs.find(p=>p.id===wl.progId);
+    if(prog&&prog.days&&prog.days[dayIdx]){
+      dl.pdOverride=JSON.parse(JSON.stringify(prog.days[dayIdx]));
+    }
+  }
+  if(dl.pdOverride&&dl.pdOverride.exercises){
+    dl.pdOverride.exercises.splice(exIdx,1);
+  }
+  if(!dl.log)dl.log=[];
+  dl.log.splice(exIdx,1);
+  wl.days[dayIdx]=dl;
+  setWeekLogLocal(wl,weekOff);
+  scheduleAutoSave(weekOff);
+  renderToday();
+  toast('운동 삭제됨','var(--ac)');
+};
+
+window.todayAddExercise=function(dayIdx,weekOff){
+  const nameEl=document.getElementById('today-add-name');
+  const name=nameEl?nameEl.value.trim():'';
+  if(!name){toast('운동명을 입력하세요','var(--ac)');return;}
+  const sectionEl=document.getElementById('today-add-section');
+  const typeEl=document.getElementById('today-add-type');
+  const setsEl=document.getElementById('today-add-sets');
+  const section=sectionEl?sectionEl.value:'main';
+  const exType=typeEl?typeEl.value:'';
+  const sets=parseInt(setsEl&&setsEl.value)||3;
+
+  const wl=getWeekLog(weekOff);
+  const dl=wl.days[dayIdx]||{};
+
+  if(!dl.pdOverride){
+    const prog=programs.find(p=>p.id===wl.progId);
+    if(prog&&prog.days&&prog.days[dayIdx]){
+      dl.pdOverride=JSON.parse(JSON.stringify(prog.days[dayIdx]));
+    } else {
+      dl.pdOverride={label:'오늘',exercises:[]};
+    }
+  }
+  if(!dl.pdOverride.exercises)dl.pdOverride.exercises=[];
+
+  const newEx={name:name,section:section,sets:sets,rest:90,alts:[]};
+  if(exType==='cardio')newEx.exType='cardio';
+  dl.pdOverride.exercises.push(newEx);
+
+  if(!dl.log)dl.log=[];
+  if(exType==='cardio'){
+    dl.log.push({name:name,exType:'cardio',sets:[{}],done:false});
+  } else {
+    dl.log.push({name:name,sets:Array.from({length:sets},()=>({weight:'',reps:'',done:false})),done:false});
+  }
+
+  wl.days[dayIdx]=dl;
+  setWeekLogLocal(wl,weekOff);
+  scheduleAutoSave(weekOff);
+  renderToday();
+  toast('✓ 운동 추가됨','var(--green)');
+};
+
+window.todaySetRestOverride=function(dayIdx,weekOff){
+  if(!confirm('오늘을 휴식일로 전환할까요?\n기존 입력된 기록은 초기화됩니다.'))return;
+  const wl=getWeekLog(weekOff);
+  const dl=wl.days[dayIdx]||{};
+  dl.pdOverride={label:'REST',type:'rest',exercises:[]};
+  dl.log=[];
+  dl.done=false;
+  wl.days[dayIdx]=dl;
+  setWeekLogLocal(wl,weekOff);
+  window._todayEditMode=false;
+  scheduleAutoSave(weekOff);
+  renderToday();
+  toast('🌿 휴식일로 전환됨','var(--t2)');
+};
 
 window.onTodayDateChange=function(val){
   todaySelectedDate=val||null;
