@@ -2105,10 +2105,10 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       :(alts.length===1?'selectAltEx('+dayIdx+','+ei+',0,'+weekOff+')':'showAltMenu(this,'+dayIdx+','+ei+','+weekOff+')');
     const curSetCount=(ex.sets||[]).length;
 
-    let block='<div class="log-ex-block'+(isEditMode?' edit-mode':'')+'" data-ei="'+ei+'" '+(isEditMode?'draggable="true"':'')+'>'
+    let block='<div class="log-ex-block'+(isEditMode?' edit-mode':'')+'" data-ei="'+ei+'" '+(isEditMode?'draggable="false"':'')+'>'
       +(isEditMode
         ?'<div style="display:flex;align-items:center;gap:8px;padding:7px 14px 0;">'
-         +'<div class="log-ex-drag" data-ei="'+ei+'">≡</div>'
+        +'<div class="log-ex-drag" data-ei="'+ei+'" style="cursor:grab;font-size:20px;padding:4px 6px;color:var(--t2);user-select:none;touch-action:none;" title="드래그로 순서 변경">≡</div>'
          +'<span style="font-family:var(--fm);font-size:9px;color:var(--t3);letter-spacing:.1em;flex:1;">드래그로 순서 변경</span>'
          +'<button class="log-ex-del" onclick="todayRemoveExercise('+dayIdx+','+ei+','+weekOff+')" title="종목 삭제">✕</button>'
          +'</div>'
@@ -2239,17 +2239,33 @@ window.todayRemoveExercise=function(dayIdx,exIdx,weekOff){
 window.initTodayExDrag=function(body,dayIdx,weekOff){
   let srcEi=null;
   body.querySelectorAll('.log-ex-block[data-ei]').forEach(function(block){
+    // 드래그 핸들에서만 draggable 활성화 (input 등 자식 요소 간섭 방지)
+    const handle=block.querySelector('.log-ex-drag');
+    if(handle){
+      handle.addEventListener('mousedown',function(){block.setAttribute('draggable','true');});
+      handle.addEventListener('touchstart',function(){block.setAttribute('draggable','true');},{passive:true});
+    }
     block.addEventListener('dragstart',function(e){
-      srcEi=parseInt(block.dataset.ei);e.dataTransfer.effectAllowed='move';
+      srcEi=parseInt(block.dataset.ei);
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain',srcEi);
       setTimeout(function(){block.style.opacity='.4';},0);
     });
-    block.addEventListener('dragend',function(){block.style.opacity='';srcEi=null;});
+    block.addEventListener('dragend',function(){
+      block.style.opacity='';
+      block.setAttribute('draggable','false');
+      srcEi=null;
+    });
     block.addEventListener('dragover',function(e){
       e.preventDefault();
       body.querySelectorAll('.log-ex-block').forEach(function(b){b.classList.remove('today-drag-over');});
       block.classList.add('today-drag-over');
     });
-    block.addEventListener('dragleave',function(){block.classList.remove('today-drag-over');});
+    block.addEventListener('dragleave',function(e){
+      // 자식 요소로 이동하는 경우 무시
+      if(block.contains(e.relatedTarget))return;
+      block.classList.remove('today-drag-over');
+    });
     block.addEventListener('drop',function(e){
       e.preventDefault();block.classList.remove('today-drag-over');
       const tgt=parseInt(block.dataset.ei);
