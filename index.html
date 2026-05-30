@@ -2005,27 +2005,14 @@ function renderToday(){
     logWrap.innerHTML='';return;
   }
 
-  // 프로그램 day 수에 맞게 인덱스 처리
-  // restOverride 가 표시된 날은 progDay 소비 없이 건너뜀 → 이후 날에 같은 Day 배정
+  // 주간 기록·프로그램 설계와 동일하게 단순 1:1 배정 (prog.days[selWeekDow])
   const numProgDays=activeProg.days.length;
-  function calcProgDayIdx(weekLog, upTo, progDays){
-    let pi=0;
-    for(let d=0;d<=upTo;d++){
-      if(pi>=progDays.length)break;
-      const dd=weekLog.days[d]||{};
-      if(dd.restOverride){continue;}       // 이 날은 휴식 전환 → progDay 소비 안 함
-      if(progDays[pi]&&progDays[pi].type==='rest'){pi++;d--; continue;} // prog-rest는 날 소비 없이 pi만 올림
-      if(d===upTo)return pi;
-      pi++;
-    }
-    return Math.min(pi,progDays.length-1);
-  }
   const dl=wl.days[selWeekDow]||{};
-  const progDayIdx=calcProgDayIdx(wl, selWeekDow, activeProg.days);
+  const progDayIdx=selWeekDow;
   const isRestOverride=!!dl.restOverride;
-  const basePd=activeProg.days[Math.min(progDayIdx,numProgDays-1)];
+  const basePd=selWeekDow<numProgDays?activeProg.days[selWeekDow]:null;
   const pd=(!isRestOverride&&dl.pdOverride)||(!isRestOverride?basePd:null);
-  const isProgRestDay=isRestOverride||(pd&&pd.type==='rest');
+  const isProgRestDay=isRestOverride||(basePd&&basePd.type==='rest');
 
   if(isProgRestDay){
     heroWrap.innerHTML='<div class="today-hero"><div class="today-hero-left">'
@@ -2041,7 +2028,7 @@ function renderToday(){
   }
   if(!pd){heroWrap.innerHTML='';logWrap.innerHTML='';return;}
 
-  const workoutDayNum=activeProg.days.slice(0,Math.min(progDayIdx,numProgDays-1)+1).filter(function(d){return d.type!=='rest';}).length;
+  const workoutDayNum=activeProg.days.slice(0,selWeekDow+1).filter(function(d){return d.type!=='rest';}).length;
   const isDone=!!dl.done;
   const isPast=todaySelectedDate<todayStr;
   const isEditMode=!!window._todayEditMode;
