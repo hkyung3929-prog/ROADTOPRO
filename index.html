@@ -322,6 +322,33 @@ select.inp{cursor:pointer;}
 .set-ctrl-btn:hover{border-color:var(--ac2);color:var(--ac2);}
 .set-ctrl-num{font-family:var(--fm);font-size:13px;font-weight:600;color:var(--t1);min-width:20px;text-align:center;}
 
+/* 오늘 일지 - 인라인 종목 편집 (모바일/PC 공통) */
+.log-ex-edit-top{display:flex;align-items:center;gap:6px;padding:8px 12px 0;}
+.log-ex-move{width:32px;height:32px;border-radius:5px;border:1px solid var(--b2);background:var(--s3);
+  color:var(--t2);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:all .14s;line-height:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.log-ex-move:hover{border-color:var(--ac2);color:var(--ac2);}
+.log-ex-move:active{background:var(--ac);color:#000;border-color:var(--ac);}
+.log-ex-move:disabled{opacity:.28;cursor:default;}
+.log-ex-edit-hint{font-family:var(--fm);font-size:9px;color:var(--t3);letter-spacing:.06em;flex:1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.log-ex-name-edit{width:100%;background:var(--s3);border:1px solid var(--b2);border-radius:5px;
+  color:var(--t1);font-family:var(--fh);font-size:16px;font-weight:700;letter-spacing:.02em;
+  padding:9px 11px;outline:none;transition:border-color .15s;margin-bottom:7px;}
+.log-ex-name-edit:focus{border-color:var(--ac);color:var(--ac);}
+.log-ex-name-edit::placeholder{color:var(--t3);}
+.log-ex-edit-ctrls{display:flex;gap:6px;flex-wrap:wrap;}
+.ex-mini-sel{flex:1;min-width:120px;background:var(--s3);border:1px solid var(--b2);border-radius:5px;
+  color:var(--t2);font-family:var(--fm);font-size:12px;padding:7px 8px;outline:none;cursor:pointer;transition:border-color .15s;}
+.ex-mini-sel:focus{border-color:var(--ac);}
+.ex-mini-sel option{background:var(--s2);}
+@media(max-width:600px){
+  .log-ex-move{width:38px;height:38px;font-size:16px;}
+  .ex-mini-sel{font-size:16px!important;min-width:0;}
+  .log-ex-edit-hint{font-size:8px;}
+  .log-ex-edit-top .log-ex-drag{display:none;}
+}
+
 /* 부위 드롭다운 */
 .muscle-sel{background:var(--s3);border:1px solid var(--b1);border-radius:4px;color:var(--t2);font-family:var(--fm);font-size:11px;padding:3px 6px;outline:none;cursor:pointer;transition:border-color .15s;min-width:64px;}
 .muscle-sel:focus{border-color:var(--ac);}
@@ -2091,25 +2118,45 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       ?'selectAltEx('+dayIdx+','+ei+',-1,'+weekOff+')'
       :(alts.length===1?'selectAltEx('+dayIdx+','+ei+',0,'+weekOff+')':'showAltMenu(this,'+dayIdx+','+ei+','+weekOff+')');
     const curSetCount=(ex.sets||[]).length;
+    // 같은 섹션 내 위치 (위/아래 버튼 비활성 판단)
+    const grp=(exDef.section==='warmup')?warmups:mains;
+    const posInGrp=grp.findIndex(g=>g.i===ei);
+    const isFirstInGrp=posInGrp<=0;
+    const isLastInGrp=posInGrp>=grp.length-1;
 
     let block='<div class="log-ex-block'+(isEditMode?' edit-mode':'')+'" data-ei="'+ei+'" '+(isEditMode?'draggable="false"':'')+'>'
       +(isEditMode
-        ?'<div style="display:flex;align-items:center;gap:8px;padding:7px 14px 0;">'
-        +'<div class="log-ex-drag" data-ei="'+ei+'" style="cursor:grab;font-size:20px;padding:4px 6px;color:var(--t2);user-select:none;touch-action:none;" title="드래그로 순서 변경">≡</div>'
-         +'<span style="font-family:var(--fm);font-size:9px;color:var(--t3);letter-spacing:.1em;flex:1;">드래그로 순서 변경</span>'
-         +'<button class="log-ex-del" onclick="todayRemoveExercise('+dayIdx+','+ei+','+weekOff+')" title="종목 삭제">✕</button>'
-         +'</div>'
+        ?'<div class="log-ex-edit-top">'
+        +'<div class="log-ex-drag" data-ei="'+ei+'" title="드래그로 이동 (PC)">≡</div>'
+        +'<button class="log-ex-move" '+(isFirstInGrp?'disabled':'')+' onclick="todayMoveExercise('+dayIdx+','+ei+',-1,'+weekOff+')" title="위로">▲</button>'
+        +'<button class="log-ex-move" '+(isLastInGrp?'disabled':'')+' onclick="todayMoveExercise('+dayIdx+','+ei+',1,'+weekOff+')" title="아래로">▼</button>'
+        +'<span class="log-ex-edit-hint">▲▼ 순서변경 · 이름/종류 수정</span>'
+        +'<button class="log-ex-del" onclick="todayRemoveExercise('+dayIdx+','+ei+','+weekOff+')" title="종목 삭제">✕</button>'
+        +'</div>'
         :'')
       +'<div class="log-ex-header">'
       +'<div class="log-ex-header-left">'
-      +'<div class="log-ex-title">'+displayName
-      +(usingAlt?'<span style="font-size:10px;color:var(--ac2);font-family:var(--fm);margin-left:6px;letter-spacing:.06em;">대체중</span>':'')
-      +'</div>'
-      +'<div class="log-ex-meta">'+activeMetaText+'</div>'
+      +(isEditMode
+        ?'<input class="log-ex-name-edit" value="'+escAttr(exDef.name||displayName)+'" placeholder="운동 이름 입력" '
+          +'oninput="todayRenameExercise('+dayIdx+','+ei+',this.value,'+weekOff+')">'
+         +'<div class="log-ex-edit-ctrls">'
+           +'<select class="ex-mini-sel" onchange="todaySetExSection('+dayIdx+','+ei+',this.value,'+weekOff+')">'
+             +'<option value="main"'+(exDef.section!=='warmup'?' selected':'')+'>🔶 본운동</option>'
+             +'<option value="warmup"'+(exDef.section==='warmup'?' selected':'')+'>🔵 스트레칭/선행</option>'
+           +'</select>'
+           +'<select class="ex-mini-sel" onchange="todaySetExType('+dayIdx+','+ei+',this.value,'+weekOff+')">'
+             +'<option value=""'+(!isCardio?' selected':'')+'>🏋️ 웨이트</option>'
+             +'<option value="cardio"'+(isCardio?' selected':'')+'>🏃 유산소</option>'
+           +'</select>'
+         +'</div>'
+        :'<div class="log-ex-title">'+displayName
+         +(usingAlt?'<span style="font-size:10px;color:var(--ac2);font-family:var(--fm);margin-left:6px;letter-spacing:.06em;">대체중</span>':'')
+         +'</div>'
+         +'<div class="log-ex-meta">'+activeMetaText+'</div>')
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;">'
-      +(hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="'+altBtnClick+'">'+altBtnLabel+'</button>':'')
-      +'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+','+weekOff+')">'+(ex.done?'✓':'')+'</button>'
+      +(!isEditMode&&hasAlt?'<button class="btn-alt'+(usingAlt?' active':'')+'" onclick="'+altBtnClick+'">'+altBtnLabel+'</button>':'')
+      +(!isEditMode?'<button class="log-check'+(ex.done?' on':'')+'" onclick="'+chkF+'('+dayIdx+','+ei+','+weekOff+')">'+(ex.done?'✓':'')+'</button>':'')
       +'</div>'
       +'</div>';
 
@@ -2276,6 +2323,77 @@ window.todayReorderExercise=function(dayIdx,fromIdx,toIdx,weekOff){
   }
   if(dl.log&&dl.log.length>Math.max(fromIdx,toIdx)){
     const lg=dl.log.splice(fromIdx,1)[0];dl.log.splice(toIdx,0,lg);
+  }
+  wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);scheduleAutoSave(weekOff);renderToday();
+};
+
+/* ─── 인라인 종목 편집 헬퍼 + 기능 ─── */
+function ensureTodayOverride(wl,dl,dayIdx){
+  if(!dl.pdOverride){
+    const prog=programs.find(p=>p.id===wl.progId);
+    if(prog&&prog.days&&prog.days[dayIdx])
+      dl.pdOverride=JSON.parse(JSON.stringify(prog.days[dayIdx]));
+    else dl.pdOverride={label:'오늘',exercises:[]};
+  }
+  if(!dl.pdOverride.exercises)dl.pdOverride.exercises=[];
+  return dl;
+}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* 같은 섹션 내에서 위/아래 이동 — 모바일·PC 공통 (버튼식) */
+window.todayMoveExercise=function(dayIdx,ei,dir,weekOff){
+  const wl=getWeekLog(weekOff);const dl=wl.days[dayIdx]||{};
+  ensureTodayOverride(wl,dl,dayIdx);
+  const exs=dl.pdOverride.exercises;
+  if(!exs||!exs[ei])return;
+  const sec=exs[ei].section==='warmup'?'warmup':'main';
+  const groupIdx=exs.map((e,idx)=>({idx,sec:e.section==='warmup'?'warmup':'main'}))
+                    .filter(o=>o.sec===sec).map(o=>o.idx);
+  const pos=groupIdx.indexOf(ei);
+  const tgtPos=pos+dir;
+  if(tgtPos<0||tgtPos>=groupIdx.length)return;
+  const a=ei,b=groupIdx[tgtPos];
+  const tmp=exs[a];exs[a]=exs[b];exs[b]=tmp;
+  if(dl.log&&dl.log[a]&&dl.log[b]){const t2=dl.log[a];dl.log[a]=dl.log[b];dl.log[b]=t2;}
+  wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);scheduleAutoSave(weekOff);renderToday();
+};
+
+/* 종목 이름 인라인 수정 (그날만 적용) */
+window.todayRenameExercise=function(dayIdx,ei,val,weekOff){
+  const wl=getWeekLog(weekOff);const dl=wl.days[dayIdx]||{};
+  ensureTodayOverride(wl,dl,dayIdx);
+  if(dl.pdOverride.exercises[ei]){
+    dl.pdOverride.exercises[ei].name=val;
+    // 대체운동 활성 상태였다면 직접 수정 시 원래 종목으로 되돌려 혼선 방지
+    if(dl.log&&dl.log[ei]){dl.log[ei].name=val;if(dl.log[ei].altIdx!=null)dl.log[ei].altIdx=-1;}
+  }
+  wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);scheduleAutoSave(weekOff);
+  // 입력 포커스 유지를 위해 즉시 재렌더하지 않음
+};
+
+/* 섹션(본운동 / 스트레칭·선행) 변경 */
+window.todaySetExSection=function(dayIdx,ei,section,weekOff){
+  const wl=getWeekLog(weekOff);const dl=wl.days[dayIdx]||{};
+  ensureTodayOverride(wl,dl,dayIdx);
+  if(dl.pdOverride.exercises[ei])
+    dl.pdOverride.exercises[ei].section=(section==='warmup'?'warmup':'main');
+  wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);scheduleAutoSave(weekOff);renderToday();
+};
+
+/* 종류(웨이트 / 유산소) 변경 — 기록 구조 재생성 */
+window.todaySetExType=function(dayIdx,ei,type,weekOff){
+  const wl=getWeekLog(weekOff);const dl=wl.days[dayIdx]||{};
+  ensureTodayOverride(wl,dl,dayIdx);
+  const exDef=dl.pdOverride.exercises[ei];if(!exDef)return;
+  const toCardio=(type==='cardio');
+  if(toCardio)exDef.exType='cardio';else delete exDef.exType;
+  if(!dl.log)dl.log=[];
+  const name=exDef.name||(dl.log[ei]&&dl.log[ei].name)||'운동';
+  if(toCardio){
+    dl.log[ei]={name:name,exType:'cardio',sets:[{}],done:false};
+  }else{
+    const cnt=parseInt(exDef.sets)||3;
+    dl.log[ei]={name:name,sets:Array.from({length:cnt},()=>({weight:'',reps:'',done:false})),done:false};
   }
   wl.days[dayIdx]=dl;setWeekLogLocal(wl,weekOff);scheduleAutoSave(weekOff);renderToday();
 };
