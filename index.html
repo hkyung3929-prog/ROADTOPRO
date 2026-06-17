@@ -1731,7 +1731,7 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
       block+='<div class="log-sets-table">'
         +'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;">'
         +'<span style="font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;">실제 시간</span>'
-        +'<input class="log-field-input" type="number" min="0" step="0.5" inputmode="decimal" style="width:80px;"'
+        +'<input class="log-field-input" type="text" inputmode="text" style="width:80px;"'
         +' value="'+curTime+'" placeholder="—" oninput="'+tField+';autoCheckCardio('+dayIdx+','+ei+','+(isToday?0:'undefined')+')">'
         +'<span style="font-family:var(--fm);font-size:11px;color:var(--t3);">분</span>'
         +'</div></div>';
@@ -1748,10 +1748,10 @@ function renderLogBody(body,dl,pd,wl,dayIdx,isToday){
         const autoChk='autoCheckSets('+dayIdx+','+ei+','+(isToday?0:'undefined')+')';
         block+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
           +'<div class="log-set-num">'+(si+1)+'</div>'
-          +'<input class="log-field-input" type="number" min="0" step="0.5" inputmode="decimal"'
+          +'<input class="log-field-input" type="text" inputmode="text"'
           +' value="'+(set.weight||'')+'" placeholder="—"'
           +' oninput="'+wField+';'+autoChk+'">'
-          +'<input class="log-field-input" type="number" min="0" inputmode="numeric"'
+          +'<input class="log-field-input" type="text" inputmode="text"'
           +' value="'+(set.reps||'')+'" placeholder="—"'
           +' oninput="'+rField+';'+autoChk+'">'
           +'</div>';
@@ -2164,7 +2164,7 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       const curTime=(ex.sets&&ex.sets[0]&&ex.sets[0].time)||'';
       block+='<div class="log-sets-table"><div style="display:flex;align-items:center;gap:10px;padding:10px 0;">'
         +'<span style="font-family:var(--fm);font-size:10px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;">실제 시간</span>'
-        +'<input class="log-field-input" type="number" min="0" step="0.5" inputmode="decimal" style="width:80px;"'
+        +'<input class="log-field-input" type="text" inputmode="text" style="width:80px;"'
         +' value="'+curTime+'" placeholder="—"'
         +' oninput="updateSetFieldWeek('+dayIdx+','+ei+',0,\'time\',this.value,'+weekOff+');autoCheckCardio('+dayIdx+','+ei+','+weekOff+')">'
         +'<span style="font-family:var(--fm);font-size:11px;color:var(--t3);">분</span>'
@@ -2174,10 +2174,10 @@ function renderLogBodyToday(body,dl,pd,wl,dayIdx,weekOff){
       (ex.sets||[]).forEach(function(set,si){
         block+='<div class="log-set-row'+(set.done?' set-done':'')+'">'
           +'<div class="log-set-num">'+(si+1)+'</div>'
-          +'<input class="log-field-input" type="number" min="0" step="0.5" inputmode="decimal"'
+          +'<input class="log-field-input" type="text" inputmode="text"'
           +' value="'+(set.weight||'')+'" placeholder="—"'
           +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'weight\',this.value,'+weekOff+');autoCheckSets('+dayIdx+','+ei+','+weekOff+')">'
-          +'<input class="log-field-input" type="number" min="0" inputmode="numeric"'
+          +'<input class="log-field-input" type="text" inputmode="text"'
           +' value="'+(set.reps||'')+'" placeholder="—"'
           +' oninput="updateSetFieldWeek('+dayIdx+','+ei+','+si+',\'reps\',this.value,'+weekOff+');autoCheckSets('+dayIdx+','+ei+','+weekOff+')">'
           +'</div>';
