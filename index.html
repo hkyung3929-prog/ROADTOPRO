@@ -540,27 +540,31 @@ window._fs = { doc, getDoc, setDoc, collection, getDocs, deleteDoc };
 window._userId = USER_ID;
 
 // Firestore 저장/로드 래퍼
+// _cloudError: 직전 클라우드 작업이 실패하면 에러 객체가 담김(읽기 실패 감지용)
+window._cloudError = null;
 window.fsSet = async function(path, data) {
   try {
     await setDoc(doc(db, path), data);
-  } catch(e) { console.error('fsSet error:', e); }
+    return true;
+  } catch(e) { console.error('fsSet error:', e); window._cloudError = e; return false; }
 };
 window.fsGet = async function(path) {
   try {
     const snap = await getDoc(doc(db, path));
     return snap.exists() ? snap.data() : null;
-  } catch(e) { console.error('fsGet error:', e); return null; }
+  } catch(e) { console.error('fsGet error:', e); window._cloudError = e; return null; }
 };
 window.fsGetAll = async function(colPath) {
   try {
     const snap = await getDocs(collection(db, colPath));
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch(e) { console.error('fsGetAll error:', e); return []; }
+  } catch(e) { console.error('fsGetAll error:', e); window._cloudError = e; return []; }
 };
 window.fsDelete = async function(path) {
   try {
     await deleteDoc(doc(db, path));
-  } catch(e) { console.error('fsDelete error:', e); }
+    return true;
+  } catch(e) { console.error('fsDelete error:', e); window._cloudError = e; return false; }
 };
 
 // Firebase 준비 완료 신호
@@ -809,44 +813,187 @@ function getActiveProg(off){
   return programs.find(p=>p.startDate&&p.endDate&&wkMon<=p.endDate&&wkSun>=p.startDate)||null;
 }
 
+/* ── 클라우드 상태 & 안전장치 ── */
+window._cloudReadOk = true;   // 클라우드에서 정상적으로 읽었는지
+
+function showCloudWarning(show, msg){
+  let el = document.getElementById('cloud-warning');
+  if(show){
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'cloud-warning';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#5c1a00;color:#ffd9c2;font-size:13px;line-height:1.5;padding:10px 16px;text-align:center;border-bottom:1px solid var(--ac);font-family:var(--fb);';
+      document.body.appendChild(el);
+    }
+    el.innerHTML = msg;
+  } else if(el){ el.remove(); }
+}
+
+// 하루치 기록에 실제 내용이 얼마나 있는지 점수화(높을수록 내용 많음)
+function dayScore(d){
+  if(!d) return 0;
+  let s = 0;
+  if(d.done) s += 1;
+  if(d.notes && String(d.notes).trim()) s += 1;
+  if(Array.isArray(d.log)){
+    d.log.forEach(ex=>{
+      if(ex && Array.isArray(ex.sets)){
+        ex.sets.forEach(st=>{ if(st && (st.weight||st.reps||st.time)) s += 1; });
+      }
+      if(ex && ex.done) s += 1;
+    });
+  }
+  return s;
+}
+function weekScore(w){
+  if(!w||!w.days) return 0;
+  return Object.values(w.days).reduce((a,d)=>a+dayScore(d),0);
+}
+function ts(o){ return (o && typeof o.updatedAt==='number') ? o.updatedAt : 0; }
+
+// 프로그램 병합: id 기준 합집합. 어느 쪽도 버리지 않음.
+function mergePrograms(cloudArr, localArr){
+  const map = {};
+  (cloudArr||[]).forEach(p=>{ if(p&&p.id){ map[p.id]=map[p.id]||{}; map[p.id].cloud=p; } });
+  (localArr||[]).forEach(p=>{ if(p&&p.id){ map[p.id]=map[p.id]||{}; map[p.id].local=p; } });
+  const out = [];
+  Object.values(map).forEach(({cloud,local})=>{
+    if(cloud && !local) out.push(cloud);
+    else if(local && !cloud) out.push(local);
+    else out.push(ts(local) >= ts(cloud) ? local : cloud); // 동률이면 로컬 우선(복구 보호)
+  });
+  return out;
+}
+
+// 한 주 병합: 요일별 합집합. 한 쪽에만 내용이 있으면 그 내용을 유지 → 사라지지 않음.
+function mergeWeek(cloudW, localW){
+  if(cloudW && !localW) return cloudW;
+  if(localW && !cloudW) return localW;
+  const newerLocal = ts(localW) >= ts(cloudW);
+  const res = { progId:(newerLocal?localW.progId:cloudW.progId), days:{}, updatedAt:Math.max(ts(cloudW),ts(localW)) };
+  if(res.progId==null) res.progId = (cloudW.progId!=null?cloudW.progId:localW.progId);
+  const idxs = new Set([
+    ...Object.keys((cloudW&&cloudW.days)||{}),
+    ...Object.keys((localW&&localW.days)||{})
+  ]);
+  idxs.forEach(i=>{
+    const cd = cloudW.days ? cloudW.days[i] : null;
+    const ld = localW.days ? localW.days[i] : null;
+    if(cd && !ld) res.days[i]=cd;
+    else if(ld && !cd) res.days[i]=ld;
+    else {
+      const cs=dayScore(cd), ls=dayScore(ld);
+      if(ls>cs) res.days[i]=ld;
+      else if(cs>ls) res.days[i]=cd;
+      else res.days[i]= newerLocal ? ld : cd; // 내용량 같으면 최신 주 우선
+    }
+  });
+  return res;
+}
+function mergeLogs(cloudLogs, localLogs){
+  const out = {};
+  const keys = new Set([ ...Object.keys(cloudLogs||{}), ...Object.keys(localLogs||{}) ]);
+  keys.forEach(k=>{ out[k] = mergeWeek((cloudLogs||{})[k], (localLogs||{})[k]); });
+  return out;
+}
+
 /* ── Firebase 저장/로드 ── */
 function userPath(){return 'users/'+window._userId;}
+
 async function savePrograms(){
+  lsSave('rtp_programs_'+currentUser, programs);   // 로컬은 항상 안전하게 저장
+  if(!window._cloudReadOk){                        // 클라우드 못 읽은 상태 → 덮어쓰기 방지
+    toast('⚠️ 클라우드 미연결 — 이 기기에만 저장됨','var(--ac)');
+    return;
+  }
   showLoading(true);
+  const now = Date.now();
   for(const p of programs){
+    p.updatedAt = now;
     await window.fsSet(userPath()+'/programs/'+p.id, p);
   }
   lsSave('rtp_programs_'+currentUser, programs);
   showLoading(false);
 }
+
 async function saveWeekLog(off){
   if(off===undefined)off=weekOffset;
   const wk=weekKey(off);
   const wl=logs[wk]||{progId:null,days:{}};
+  lsSave('rtp_logs_'+currentUser, logs);           // 로컬은 항상 먼저 안전하게 저장
+  if(!window._cloudReadOk){                        // 클라우드 못 읽은 상태 → 덮어쓰기 방지
+    toast('⚠️ 클라우드 미연결 — 이 기기에만 저장됨','var(--ac)');
+    return;
+  }
+  if(weekScore(wl)===0) return;                     // 내용 0인 빈 주는 클라우드에 쓰지 않음(기존 데이터 보호)
   showLoading(true);
+  wl.updatedAt = Date.now();
+  logs[wk]=wl;
   await window.fsSet(userPath()+'/logs/'+wk, wl);
   lsSave('rtp_logs_'+currentUser, logs);
   showLoading(false);
 }
+
 async function deleteProgFromFirestore(id){
   await window.fsDelete(userPath()+'/programs/'+id);
 }
+
 async function loadAllData(){
   showLoading(true);
-  try{
-    const progs=await window.fsGetAll(userPath()+'/programs');
-    programs=progs.length>0?progs:(lsLoad('rtp_programs_'+currentUser)||[]);
-    lsSave('rtp_programs_'+currentUser,programs);
-    const logDocs=await window.fsGetAll(userPath()+'/logs');
-    logs={};
-    logDocs.forEach(l=>{const id=l.id;delete l.id;logs[id]=l;});
-    if(!logDocs.length)logs=lsLoad('rtp_logs_'+currentUser)||{};
-    lsSave('rtp_logs_'+currentUser,logs);
-  }catch(err){
-    console.warn('Firebase 실패, localStorage 사용:', err);
-    programs=lsLoad('rtp_programs_'+currentUser)||[];
-    logs=lsLoad('rtp_logs_'+currentUser)||{};
+  window._cloudError = null;
+
+  const localProgs = lsLoad('rtp_programs_'+currentUser) || [];
+  const localLogs  = lsLoad('rtp_logs_'+currentUser) || {};
+
+  const cloudProgs   = await window.fsGetAll(userPath()+'/programs');
+  const cloudLogDocs = await window.fsGetAll(userPath()+'/logs');
+
+  if(window._cloudError){
+    // 읽기 실패 → 절대 비우지 않음. 로컬 유지 + 저장 잠금 + 경고.
+    window._cloudReadOk = false;
+    programs = localProgs;
+    logs = localLogs;
+    showCloudWarning(true,
+      '⚠️ 클라우드에서 데이터를 불러오지 못했습니다(권한 오류). '+
+      '데이터 보호를 위해 <b>클라우드 저장이 일시 중지</b>되었습니다. '+
+      '클라우드의 데이터는 그대로 있으니 Firestore 규칙을 확인해 주세요.');
+    showLoading(false);
+    return;
   }
+
+  // 읽기 성공
+  window._cloudReadOk = true;
+  showCloudWarning(false);
+
+  const cloudLogs = {};
+  cloudLogDocs.forEach(l=>{ const id=l.id; delete l.id; cloudLogs[id]=l; });
+
+  // 클라우드 + 로컬 병합(어느 쪽도 잃지 않음)
+  programs = mergePrograms(cloudProgs, localProgs);
+  logs     = mergeLogs(cloudLogs, localLogs);
+
+  lsSave('rtp_programs_'+currentUser, programs);
+  lsSave('rtp_logs_'+currentUser, logs);
+
+  // 병합 결과가 클라우드와 다른 것만 다시 올림(로컬에만 있던 기록을 클라우드로 복구)
+  try{
+    const cloudProgById = {};
+    (cloudProgs||[]).forEach(p=>{ if(p&&p.id) cloudProgById[p.id]=p; });
+    for(const p of programs){
+      if(JSON.stringify(cloudProgById[p.id]) !== JSON.stringify(p)){
+        await window.fsSet(userPath()+'/programs/'+p.id, p);
+      }
+    }
+    for(const k of Object.keys(logs)){
+      if(weekScore(logs[k])===0) continue;
+      if(JSON.stringify(cloudLogs[k]) !== JSON.stringify(logs[k])){
+        await window.fsSet(userPath()+'/logs/'+k, logs[k]);
+      }
+    }
+  }catch(err){
+    console.warn('병합 결과 업로드 중 일부 실패:', err);
+  }
+
   showLoading(false);
 }
 
