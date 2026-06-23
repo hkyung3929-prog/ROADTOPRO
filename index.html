@@ -513,6 +513,31 @@ select.inp{cursor:pointer;}
   color: var(--t2);
 }
 .user-badge-icon { font-size: 20px; }
+
+/* ── Phase 3: 비밀번호 ── */
+#cover-phase3 { animation: fadeUp .35s ease both; display:none; flex-direction:column; align-items:center; gap:18px; position:relative; z-index:10; }
+.pwd-who { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.pwd-who-icon { font-size:46px; line-height:1; filter:drop-shadow(0 4px 12px rgba(0,0,0,.4)); }
+.pwd-who-name { font-family:var(--fh); font-size:20px; font-weight:900; font-style:italic; letter-spacing:.12em; color:var(--t1); }
+.pwd-label { font-family:var(--fm); font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--t3); }
+.pwd-row { display:flex; gap:10px; align-items:center; }
+.pwd-input {
+  width:170px; text-align:center; letter-spacing:.5em; font-family:var(--fm); font-size:22px;
+  background:rgba(255,255,255,.04); border:1px solid var(--b2); border-radius:10px;
+  color:var(--t1); padding:12px 14px; outline:none; transition:border-color .18s, box-shadow .18s;
+}
+.pwd-input:focus { border-color:var(--ac); box-shadow:0 0 0 3px rgba(255,106,0,.18); }
+.pwd-input.pig:focus { border-color:#ff69b4; box-shadow:0 0 0 3px rgba(255,105,180,.18); }
+.pwd-go {
+  font-family:var(--fh); font-size:18px; font-weight:900; font-style:italic; letter-spacing:.06em;
+  color:#000; background:var(--ac); border:none; border-radius:10px; padding:12px 20px; cursor:pointer; transition:all .18s;
+}
+.pwd-go:hover { background:var(--ac2); transform:translateY(-2px); }
+.pwd-err { font-family:var(--fb); font-size:12px; color:#ff5a5a; min-height:16px; }
+.pwd-back { background:none; border:none; color:var(--t3); font-family:var(--fm); font-size:11px; letter-spacing:.14em; text-transform:uppercase; cursor:pointer; transition:color .18s; }
+.pwd-back:hover { color:var(--t1); }
+@keyframes pwdShake { 0%,100%{transform:translateX(0);} 20%{transform:translateX(-8px);} 40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(6px);} }
+.pwd-input.shake { animation: pwdShake .4s; border-color:#ff5a5a; }
 </style>
 
 <script type="module">
@@ -600,16 +625,33 @@ document.dispatchEvent(new Event('firebase-ready'));
     <div id="cover-phase2" style="display:none;">
       <div class="cover-choice-label">누구로 입장할까요?</div>
       <div class="cover-choice-row">
-        <button class="btn-choice" onclick="enterAs('tiger')">
+        <button class="btn-choice" onclick="showPwd('tiger')">
           <div class="btn-choice-icon">🐯</div>
           <div class="btn-choice-name">TIGER</div>
         </button>
         <div class="cover-choice-vs">VS</div>
-        <button class="btn-choice btn-choice-pig" onclick="enterAs('pig')">
+        <button class="btn-choice btn-choice-pig" onclick="showPwd('pig')">
           <div class="btn-choice-icon">🐷</div>
           <div class="btn-choice-name">PIG</div>
         </button>
       </div>
+    </div>
+
+    <!-- Phase 3: 비밀번호 -->
+    <div id="cover-phase3">
+      <div class="pwd-who">
+        <div class="pwd-who-icon" id="pwd-icon">🐯</div>
+        <div class="pwd-who-name" id="pwd-name">TIGER</div>
+      </div>
+      <div class="pwd-label">비밀번호 입력</div>
+      <div class="pwd-row">
+        <input id="pwd-input" class="pwd-input" type="password" inputmode="numeric"
+               autocomplete="off" maxlength="12" placeholder="••••"
+               onkeydown="if(event.key==='Enter')submitPwd()">
+        <button class="pwd-go" onclick="submitPwd()">→</button>
+      </div>
+      <div class="pwd-err" id="pwd-err"></div>
+      <button class="pwd-back" onclick="backToChoice()">← 다시 선택</button>
     </div>
   </div>
   <div class="cover-bottom-line"></div>
@@ -737,6 +779,39 @@ let currentUser='tiger';
 window.showChoice=function(){
   document.getElementById('cover-phase1').style.display='none';
   document.getElementById('cover-phase2').style.display='flex';
+};
+
+/* ── 비밀번호 ── */
+const PWD={tiger:'0131',pig:'1020'};
+let _pendingUser=null;
+window.showPwd=function(user){
+  _pendingUser=user;
+  document.getElementById('cover-phase2').style.display='none';
+  const p3=document.getElementById('cover-phase3');
+  p3.style.display='flex';
+  document.getElementById('pwd-icon').textContent=user==='tiger'?'🐯':'🐷';
+  document.getElementById('pwd-name').textContent=user==='tiger'?'TIGER':'PIG';
+  const inp=document.getElementById('pwd-input');
+  inp.value='';inp.classList.toggle('pig',user==='pig');
+  document.getElementById('pwd-err').textContent='';
+  setTimeout(()=>inp.focus(),50);
+};
+window.backToChoice=function(){
+  _pendingUser=null;
+  document.getElementById('cover-phase3').style.display='none';
+  document.getElementById('cover-phase2').style.display='flex';
+};
+window.submitPwd=function(){
+  if(!_pendingUser)return;
+  const inp=document.getElementById('pwd-input');
+  const val=(inp.value||'').trim();
+  if(val===PWD[_pendingUser]){
+    enterAs(_pendingUser);
+  }else{
+    document.getElementById('pwd-err').textContent='비밀번호가 틀렸습니다';
+    inp.classList.remove('shake');void inp.offsetWidth;inp.classList.add('shake');
+    inp.value='';inp.focus();
+  }
 };
 window.enterAs=function(user){
   currentUser=user;
@@ -1004,6 +1079,8 @@ window.goHome=function(){
   cover.style.display='flex';
   document.getElementById('cover-phase1').style.display='block';
   document.getElementById('cover-phase2').style.display='none';
+  document.getElementById('cover-phase3').style.display='none';
+  _pendingUser=null;
 };
 
 /* ── 탭 ── */
