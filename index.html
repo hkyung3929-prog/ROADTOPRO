@@ -2047,9 +2047,12 @@ window.selectAltEx=function(di,ei,idx,weekOff){
   // 대체 운동 세트 수 맞춤
   if(idx>=0){
     const prog=programs.find(p=>p.id==(wl.progId||''));
-    if(prog&&prog.days&&prog.days[di]){
-      const exDef=(prog.days[di].exercises||[])[ei]||{};
-      const alts=(Array.isArray(exDef.alts)?exDef.alts:[]).map(a=>typeof a==='object'&&a?a:{name:a||''});
+    // 오늘/주간에서 종목을 직접 편집하면 dl.pdOverride가 생기므로, 렌더와 동일하게 override 우선 사용
+    const pd=(dl.pdOverride)||(prog&&prog.days&&prog.days[di]?prog.days[di]:null);
+    if(pd&&pd.exercises){
+      const exDef=(pd.exercises||[])[ei]||{};
+      // 렌더(renderExBlock)·메뉴(showAltMenu)와 동일하게 이름 있는 항목만 필터링한 목록으로 인덱스 일치
+      const alts=(Array.isArray(exDef.alts)?exDef.alts:[]).map(a=>typeof a==='object'&&a?a:{name:a||''}).filter(a=>a.name&&a.name.trim());
       const altDef=alts[idx];
       if(altDef){
         const isCardio=(altDef.exType==='cardio');
@@ -2073,10 +2076,13 @@ window.showAltMenu=function(btn,di,ei,weekOff){
   const isPanel=(weekOff==='undefined'||weekOff===undefined);
   const off=isPanel?weekOffset:(typeof weekOff==='number'?weekOff:parseInt(weekOff)||0);
   const wl=getWeekLog(off);
+  const dl=wl.days[di]||{};
   const prog=programs.find(p=>p.id==(wl.progId||''));
+  // 종목 직접 편집 시 생기는 dl.pdOverride를 렌더와 동일하게 우선 사용 (원본 프로그램만 보면 인덱스가 어긋나 목록이 비어 안 뜸)
+  const pd=(dl.pdOverride)||(prog&&prog.days&&prog.days[di]?prog.days[di]:null);
   let alts=[];
-  if(prog&&prog.days&&prog.days[di]){
-    const exDef=(prog.days[di].exercises||[])[ei]||{};
+  if(pd&&pd.exercises){
+    const exDef=(pd.exercises||[])[ei]||{};
     alts=(Array.isArray(exDef.alts)?exDef.alts:[]).map(a=>typeof a==='object'&&a?a:{name:a||''}).filter(a=>a.name&&a.name.trim());
   }
   if(!alts.length)return;
